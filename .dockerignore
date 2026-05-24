@@ -1,0 +1,5 @@
+examples/
+package/
+*.md
+*.xpkg
+.git

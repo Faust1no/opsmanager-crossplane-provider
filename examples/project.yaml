@@ -1,0 +1,22 @@
+apiVersion: opsmanager.crossplane.io/v1alpha1
+kind: Project
+metadata:
+  name: test-project
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    name: "test-project"
+    # Replace with your actual org ID from:
+    # Ops Manager UI → top-left org menu → Settings → Organization ID
+    orgId: "6a09b573a4d0a92fff4a29fb"
+    ldapGroupMappings:
+      - roleName: GROUP_OWNER
+        ldapGroups:
+          - "ou=opsmanager-admins,ou=users,dc=opsmanager,dc=local"
+      - roleName: GROUP_DATA_ACCESS_ADMIN
+        ldapGroups:
+          - "ou=opsmanager-developers,ou=users,dc=opsmanager,dc=local"
+      - roleName: GROUP_READ_ONLY
+        ldapGroups:
+          - "ou=opsmanager-readonly,ou=users,dc=opsmanager,dc=local"

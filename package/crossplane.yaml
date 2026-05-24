@@ -1,0 +1,16 @@
+apiVersion: meta.pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-opsmanager
+  annotations:
+    meta.crossplane.io/maintainer: "platform-team"
+    meta.crossplane.io/description: "Crossplane provider for MongoDB Ops Manager backup infrastructure."
+    meta.crossplane.io/readme: |
+      Manages MongoDB Ops Manager resources declaratively:
+      Projects (with LDAP group mappings), S3 snapshot blockstores,
+      S3 oplog stores, and backup daemon configuration.
+spec:
+  crossplane:
+    version: ">=v1.14.0-0"
+  controller:
+    image: provider-opsmanager:latest

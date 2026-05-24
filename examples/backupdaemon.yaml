@@ -1,0 +1,20 @@
+apiVersion: opsmanager.crossplane.io/v1alpha1
+kind: BackupDaemon
+metadata:
+  name: ops-manager-daemon
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    # This is the host:port the backup daemon registers with in Ops Manager.
+    # Find it in Ops Manager UI → Admin → Backup → Daemons
+    # It will be the pod's hostname or the headless service DNS of the
+    # backup daemon StatefulSet, e.g.:
+    # ops-manager-backup-daemon-0.ops-manager-backup-daemon-svc.mongodb.svc.cluster.local:27018
+    # Hostname of the backup daemon as shown in Ops Manager UI → Admin → Backup → Daemons.
+    # Use only the hostname — not the head directory path.
+    machine: "ops-manager-backup-daemon-0.ops-manager-backup-daemon-svc.mongodb.svc.cluster.local"
+    labels:
+      - "my-cluster"
+    assignmentEnabled: true
+    backupJobsEnabled: true
