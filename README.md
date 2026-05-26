@@ -132,6 +132,39 @@ crossplane xpkg build \
   --package-file=provider-opsmanager.xpkg
 ```
 
+## Pulling the package from the registry
+
+The latest `.xpkg` is published to GitHub Container Registry. To pull and save
+it as a tar file for transfer to an air-gapped environment:
+
+```bash
+# Pull and save as a gzipped tar
+docker pull ghcr.io/faust1no/opsmanager-crossplane-provider:v0.2.0
+docker save ghcr.io/faust1no/opsmanager-crossplane-provider:v0.2.0 | gzip > provider-opsmanager-v0.2.0.tar.gz
+```
+
+Transfer the file to your target machine, then load and extract the `.xpkg`:
+
+```bash
+# On the target machine — load the image
+docker load < provider-opsmanager-v0.2.0.tar.gz
+
+# Save as .xpkg using the crossplane CLI
+crossplane xpkg build \
+  --package-root=./package \
+  --embed-runtime-image=ghcr.io/faust1no/opsmanager-crossplane-provider:v0.2.0 \
+  --package-file=provider-opsmanager-v0.2.0.xpkg
+```
+
+Or if you just want to download the raw OCI artifact directly without Docker:
+
+```bash
+crossplane xpkg pull ghcr.io/faust1no/opsmanager-crossplane-provider:v0.2.0 \
+  --package-file=provider-opsmanager-v0.2.0.xpkg
+```
+
+---
+
 ## Deploying in an air-gapped cluster
 
 Push the package to your internal registry:
