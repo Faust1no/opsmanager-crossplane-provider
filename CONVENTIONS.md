@@ -217,10 +217,8 @@ package <kind>
 // Error constants — always the first thing in the file after imports.
 // Follow the "cannot <verb> <noun>" pattern.
 const (
-    errNot<Kind>      = "managed resource is not a <Kind>"
+    errNot<Kind>         = "managed resource is not a <Kind>"
     errGetProviderConfig = "cannot get ProviderConfig"
-    errGetSecret         = "cannot get credentials secret"
-    errParseCredentials  = "cannot parse credentials"
     errCreateClient      = "cannot create Ops Manager client"
     errTrackUsage        = "cannot track ProviderConfig usage"
     errGet<Kind>         = "cannot get <kind> from Ops Manager"
@@ -267,7 +265,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
     if err := c.kube.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
         return nil, errors.Wrap(err, errGetProviderConfig)
     }
-    creds, err := getCredentials(ctx, c.kube, pc)
+    creds, err := clients.GetCredentials(ctx, c.kube, pc)
     if err != nil {
         return nil, err
     }
@@ -331,6 +329,10 @@ Rules:
 **Helper functions** — copy these verbatim into every controller that needs them.
 Do not deduplicate into a shared package; keeping them local avoids coupling.
 
+`clients.GetCredentials` is the one exception: credential fetching is shared in
+`internal/clients/opsmanager.go` because all controllers connect to the same Ops
+Manager instance with the same API key pair.
+
 ```go
 func stringSlicesEqual(a, b []string) bool {
     if len(a) != len(b) { return false }
@@ -348,28 +350,6 @@ func isNotFound(err error) bool {
     if err == nil { return false }
     var e *opsmngr.ErrorResponse
     return stderrors.As(err, &e) && e.Response != nil && e.Response.StatusCode == http.StatusNotFound
-}
-
-// getCredentials is duplicated in every controller — do not share it.
-func getCredentials(ctx context.Context, kube client.Client, pc *v1beta1.ProviderConfig) (*clients.Credentials, error) {
-    cd := pc.Spec.Credentials
-    if cd.Source != xpv1.CredentialsSourceSecret || cd.SecretRef == nil {
-        return nil, errors.New("credentials source must be Secret with a secretRef")
-    }
-    secret := &corev1.Secret{}
-    if err := kube.Get(ctx, types.NamespacedName{
-        Namespace: cd.SecretRef.Namespace,
-        Name:      cd.SecretRef.Name,
-    }, secret); err != nil {
-        return nil, errors.Wrap(err, errGetSecret)
-    }
-    data, ok := secret.Data[cd.SecretRef.Key]
-    if !ok {
-        return nil, errors.Errorf("key %q not found in secret %s/%s",
-            cd.SecretRef.Key, cd.SecretRef.Namespace, cd.SecretRef.Name)
-    }
-    creds, err := clients.ParseCredentials(data)
-    return creds, errors.Wrap(err, errParseCredentials)
 }
 ```
 

@@ -20,7 +20,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: AGE
       type: date
-    - jsonPath: .spec.credentials.secretRef.name
+    - jsonPath: .spec.credentials.publicKeySecretRef.name
       name: SECRET-NAME
       priority: 1
       type: string
@@ -56,14 +56,27 @@ spec:
                 minLength: 1
                 type: string
               credentials:
-                description: |-
-                  Credentials required to authenticate to the Ops Manager API.
-                  The referenced secret must contain "publicKey" and "privateKey" keys.
+                description: Credentials required to authenticate to the Ops Manager API.
                 properties:
-                  secretRef:
-                    description: |-
-                      SecretRef references a Kubernetes Secret that contains the credentials.
-                      The secret must have keys "publicKey" and "privateKey".
+                  publicKeySecretRef:
+                    description: PublicKeySecretRef references the secret key containing the Ops Manager API public key.
+                    properties:
+                      key:
+                        description: The key to select.
+                        type: string
+                      name:
+                        description: Name of the secret.
+                        type: string
+                      namespace:
+                        description: Namespace of the secret.
+                        type: string
+                    required:
+                    - key
+                    - name
+                    - namespace
+                    type: object
+                  privateKeySecretRef:
+                    description: PrivateKeySecretRef references the secret key containing the Ops Manager API private key.
                     properties:
                       key:
                         description: The key to select.

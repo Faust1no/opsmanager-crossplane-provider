@@ -93,8 +93,13 @@ func (in *ProviderConfigStatus) DeepCopy() *ProviderConfigStatus {
 
 func (in *ProviderCredentials) DeepCopyInto(out *ProviderCredentials) {
 	*out = *in
-	if in.SecretRef != nil {
-		in, out := &in.SecretRef, &out.SecretRef
+	if in.PublicKeySecretRef != nil {
+		in, out := &in.PublicKeySecretRef, &out.PublicKeySecretRef
+		*out = new(v1.SecretKeySelector)
+		**out = **in
+	}
+	if in.PrivateKeySecretRef != nil {
+		in, out := &in.PrivateKeySecretRef, &out.PrivateKeySecretRef
 		*out = new(v1.SecretKeySelector)
 		**out = **in
 	}

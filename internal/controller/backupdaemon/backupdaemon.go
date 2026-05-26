@@ -12,7 +12,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/pkg/errors"
 	"go.mongodb.org/ops-manager/opsmngr"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,8 +24,6 @@ import (
 const (
 	errNotBackupDaemon   = "managed resource is not a BackupDaemon"
 	errGetProviderConfig = "cannot get ProviderConfig"
-	errGetSecret         = "cannot get credentials secret"
-	errParseCredentials  = "cannot parse credentials"
 	errCreateClient      = "cannot create Ops Manager client"
 	errTrackUsage        = "cannot track ProviderConfig usage"
 	errListDaemons       = "cannot list backup daemons from Ops Manager"
@@ -75,7 +72,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		return nil, errors.Wrap(err, errGetProviderConfig)
 	}
 
-	creds, err := getCredentials(ctx, c.kube, pc)
+	creds, err := clients.GetCredentials(ctx, c.kube, pc)
 	if err != nil {
 		return nil, err
 	}
@@ -272,25 +269,3 @@ func boolPtrEqual(a *bool, b *bool) bool {
 	return *a == *b
 }
 
-func getCredentials(ctx context.Context, kube client.Client, pc *v1beta1.ProviderConfig) (*clients.Credentials, error) {
-	cd := pc.Spec.Credentials
-	if cd.Source != xpv1.CredentialsSourceSecret || cd.SecretRef == nil {
-		return nil, errors.New("credentials source must be Secret with a secretRef")
-	}
-
-	secret := &corev1.Secret{}
-	if err := kube.Get(ctx, types.NamespacedName{
-		Namespace: cd.SecretRef.Namespace,
-		Name:      cd.SecretRef.Name,
-	}, secret); err != nil {
-		return nil, errors.Wrap(err, errGetSecret)
-	}
-
-	data, ok := secret.Data[cd.SecretRef.Key]
-	if !ok {
-		return nil, errors.Errorf("key %q not found in secret %s/%s", cd.SecretRef.Key, cd.SecretRef.Namespace, cd.SecretRef.Name)
-	}
-
-	creds, err := clients.ParseCredentials(data)
-	return creds, errors.Wrap(err, errParseCredentials)
-}

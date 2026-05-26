@@ -28,10 +28,14 @@ spec:
   baseURL: http://ops-manager:8080/
   credentials:
     source: Secret
-    secretRef:
+    publicKeySecretRef:
       namespace: crossplane-system
-      name: ops-manager-credentials
-      key: credentials
+      name: opsmanager-credentials
+      key: publicKey
+    privateKeySecretRef:
+      namespace: crossplane-system
+      name: opsmanager-credentials
+      key: privateKey
 ```
 
 **Managed Resource**

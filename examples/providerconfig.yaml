@@ -5,13 +5,10 @@ metadata:
   namespace: crossplane-system
 type: Opaque
 stringData:
-  # Replace publicKey and privateKey with a Programmatic API Key created in
-  # Ops Manager: Organization → Access Manager → API Keys → Create API Key
-  credentials: |
-    {
-      "publicKey": "zzyvpeed",
-      "privateKey": "7db8b321-3b61-4c68-9f2b-dff96f835623"
-    }
+  # Programmatic API Key created in Ops Manager:
+  # Organization → Access Manager → API Keys → Create API Key
+  publicKey: "zzyvpeed"
+  privateKey: "7db8b321-3b61-4c68-9f2b-dff96f835623"
 ---
 apiVersion: opsmanager.crossplane.io/v1beta1
 kind: ProviderConfig
@@ -23,7 +20,11 @@ spec:
   baseURL: "http://localhost:32001/"
   credentials:
     source: Secret
-    secretRef:
+    publicKeySecretRef:
       namespace: crossplane-system
       name: opsmanager-credentials
-      key: credentials
+      key: publicKey
+    privateKeySecretRef:
+      namespace: crossplane-system
+      name: opsmanager-credentials
+      key: privateKey

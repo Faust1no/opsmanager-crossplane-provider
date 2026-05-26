@@ -26,8 +26,6 @@ import (
 const (
 	errNotS3Blockstore   = "managed resource is not an S3Blockstore"
 	errGetProviderConfig = "cannot get ProviderConfig"
-	errGetSecret         = "cannot get credentials secret"
-	errParseCredentials  = "cannot parse credentials"
 	errCreateClient      = "cannot create Ops Manager client"
 	errTrackUsage        = "cannot track ProviderConfig usage"
 	errGetBlockstore     = "cannot get S3 blockstore from Ops Manager"
@@ -78,7 +76,7 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		return nil, errors.Wrap(err, errGetProviderConfig)
 	}
 
-	creds, err := getCredentials(ctx, c.kube, pc)
+	creds, err := clients.GetCredentials(ctx, c.kube, pc)
 	if err != nil {
 		return nil, err
 	}
@@ -292,25 +290,3 @@ func isNotFound(err error) bool {
 	return stderrors.As(err, &e) && e.Response != nil && e.Response.StatusCode == http.StatusNotFound
 }
 
-func getCredentials(ctx context.Context, kube client.Client, pc *v1beta1.ProviderConfig) (*clients.Credentials, error) {
-	cd := pc.Spec.Credentials
-	if cd.Source != xpv1.CredentialsSourceSecret || cd.SecretRef == nil {
-		return nil, errors.New("credentials source must be Secret with a secretRef")
-	}
-
-	secret := &corev1.Secret{}
-	if err := kube.Get(ctx, types.NamespacedName{
-		Namespace: cd.SecretRef.Namespace,
-		Name:      cd.SecretRef.Name,
-	}, secret); err != nil {
-		return nil, errors.Wrap(err, errGetSecret)
-	}
-
-	data, ok := secret.Data[cd.SecretRef.Key]
-	if !ok {
-		return nil, errors.Errorf("key %q not found in secret %s/%s", cd.SecretRef.Key, cd.SecretRef.Namespace, cd.SecretRef.Name)
-	}
-
-	creds, err := clients.ParseCredentials(data)
-	return creds, errors.Wrap(err, errParseCredentials)
-}

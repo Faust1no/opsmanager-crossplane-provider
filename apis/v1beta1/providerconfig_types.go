@@ -23,10 +23,13 @@ type ProviderCredentials struct {
 	// +kubebuilder:validation:Enum=None;Secret
 	Source xpv1.CredentialsSource `json:"source"`
 
-	// SecretRef references a Kubernetes Secret that contains the credentials.
-	// The secret must have keys "publicKey" and "privateKey".
+	// PublicKeySecretRef references the secret key containing the Ops Manager API public key.
 	// +optional
-	SecretRef *xpv1.SecretKeySelector `json:"secretRef,omitempty"`
+	PublicKeySecretRef *xpv1.SecretKeySelector `json:"publicKeySecretRef,omitempty"`
+
+	// PrivateKeySecretRef references the secret key containing the Ops Manager API private key.
+	// +optional
+	PrivateKeySecretRef *xpv1.SecretKeySelector `json:"privateKeySecretRef,omitempty"`
 }
 
 // ProviderConfigStatus represents the observed state of a ProviderConfig.
