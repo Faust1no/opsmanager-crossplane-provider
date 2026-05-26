@@ -2,7 +2,10 @@ package backupdaemon
 
 import (
 	"context"
+	stderrors "errors"
+	"net/http"
 	"net/url"
+	"strings"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
@@ -99,7 +102,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	observed, err := e.findByHostname(ctx, cr.Spec.ForProvider.Machine)
+	observed, err := e.getDaemon(ctx, cr.Spec.ForProvider)
 	if err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, errListDaemons)
 	}
@@ -129,7 +132,7 @@ func (e *external) Create(_ context.Context, _ resource.Managed) (managed.Extern
 func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
 	cr := mg.(*v1alpha1.BackupDaemon)
 
-	current, err := e.findByHostname(ctx, cr.Spec.ForProvider.Machine)
+	current, err := e.getDaemon(ctx, cr.Spec.ForProvider)
 	if err != nil {
 		return managed.ExternalUpdate{}, errors.Wrap(err, errListDaemons)
 	}
@@ -153,15 +156,32 @@ func (e *external) Delete(_ context.Context, _ resource.Managed) error {
 
 // --- helpers ---
 
-// findByHostname lists all registered daemons and returns the one whose
-// machine hostname matches. Returns nil if not found.
-func (e *external) findByHostname(ctx context.Context, hostname string) (*opsmngr.Daemon, error) {
+// getDaemon looks up the daemon in Ops Manager.
+// If headRootDirectory is set in the spec, it uses Get directly with the
+// composite ID (hostname/urlencoded(headDir)) — the reliable adoption path.
+// Otherwise it falls back to listing all daemons and matching by hostname,
+// also handling the case where d.Machine is nil in the API response.
+func (e *external) getDaemon(ctx context.Context, p v1alpha1.BackupDaemonParameters) (*opsmngr.Daemon, error) {
+	if p.HeadRootDirectory != "" {
+		id := p.Machine + "/" + url.PathEscape(p.HeadRootDirectory)
+		d, _, err := e.service.Get(ctx, id)
+		if isNotFound(err) {
+			return nil, nil
+		}
+		return d, err
+	}
+
 	list, _, err := e.service.List(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	for _, d := range list.Results {
-		if d.Machine != nil && d.Machine.Machine == hostname {
+		if d.Machine != nil && d.Machine.Machine == p.Machine {
+			return d, nil
+		}
+		// d.Machine is nil for some Ops Manager versions; fall back to the
+		// composite ID which always starts with the hostname.
+		if d.Machine == nil && strings.HasPrefix(d.ID, p.Machine+"/") {
 			return d, nil
 		}
 	}
@@ -245,6 +265,14 @@ func isUpToDate(p v1alpha1.BackupDaemonParameters, d *opsmngr.Daemon) bool {
 		return false
 	}
 	return true
+}
+
+func isNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	var e *opsmngr.ErrorResponse
+	return stderrors.As(err, &e) && e.Response != nil && e.Response.StatusCode == http.StatusNotFound
 }
 
 func stringSlicesEqual(a, b []string) bool {
