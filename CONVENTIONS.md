@@ -79,7 +79,7 @@ type <Kind>Status struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
-// +kubebuilder:resource:scope=Cluster,categories=crossplane
+// +kubebuilder:resource:scope=Namespaced,categories=crossplane  // or scope=Cluster for admin-level resources (e.g. BackupDaemon)
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="READY",type="string",JSONPath=".status.conditions[?(@.type=='Ready')].status"
 // +kubebuilder:printcolumn:name="SYNCED",type="string",JSONPath=".status.conditions[?(@.type=='Synced')].status"

@@ -116,7 +116,7 @@ repo so the Docker build context is self-contained.
 ### Step 2 — Build the controller image
 
 ```bash
-docker build -t provider-opsmanager:v0.1.0 .
+docker build -t provider-opsmanager:<version> .
 ```
 
 > If `gcr.io` is unreachable in your build environment, pull and save
@@ -128,7 +128,7 @@ docker build -t provider-opsmanager:v0.1.0 .
 ```bash
 crossplane xpkg build \
   --package-root=./package \
-  --embed-runtime-image=provider-opsmanager:v0.1.0 \
+  --embed-runtime-image=provider-opsmanager:<version> \
   --package-file=provider-opsmanager.xpkg
 ```
 
@@ -139,28 +139,28 @@ it as a tar file for transfer to an air-gapped environment:
 
 ```bash
 # Pull and save as a gzipped tar
-docker pull ghcr.io/faust1no/opsmanager-crossplane-provider:v0.2.0
-docker save ghcr.io/faust1no/opsmanager-crossplane-provider:v0.2.0 | gzip > provider-opsmanager-v0.2.0.tar.gz
+docker pull ghcr.io/faust1no/opsmanager-crossplane-provider:<version>
+docker save ghcr.io/faust1no/opsmanager-crossplane-provider:<version> | gzip > provider-opsmanager-<version>.tar.gz
 ```
 
 Transfer the file to your target machine, then load and extract the `.xpkg`:
 
 ```bash
 # On the target machine — load the image
-docker load < provider-opsmanager-v0.2.0.tar.gz
+docker load < provider-opsmanager-<version>.tar.gz
 
 # Save as .xpkg using the crossplane CLI
 crossplane xpkg build \
   --package-root=./package \
-  --embed-runtime-image=ghcr.io/faust1no/opsmanager-crossplane-provider:v0.2.0 \
-  --package-file=provider-opsmanager-v0.2.0.xpkg
+  --embed-runtime-image=ghcr.io/faust1no/opsmanager-crossplane-provider:<version> \
+  --package-file=provider-opsmanager-<version>.xpkg
 ```
 
 Or if you just want to download the raw OCI artifact directly without Docker:
 
 ```bash
-crossplane xpkg pull ghcr.io/faust1no/opsmanager-crossplane-provider:v0.2.0 \
-  --package-file=provider-opsmanager-v0.2.0.xpkg
+crossplane xpkg pull ghcr.io/faust1no/opsmanager-crossplane-provider:<version> \
+  --package-file=provider-opsmanager-<version>.xpkg
 ```
 
 ---
@@ -172,7 +172,7 @@ Push the package to your internal registry:
 ```bash
 crossplane xpkg push \
   --package-files=provider-opsmanager.xpkg \
-  your-internal-registry/provider-opsmanager:v0.1.0
+  your-internal-registry/provider-opsmanager:<version>
 ```
 
 Install the provider:
