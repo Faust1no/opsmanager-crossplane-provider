@@ -12,6 +12,7 @@ apiVersion: opsmanager.crossplane.io/v1alpha1
 kind: S3Blockstore
 metadata:
   name: minio-blockstore
+  namespace: crossplane-system
 spec:
   providerConfigRef:
     name: default

@@ -14,7 +14,7 @@ spec:
     listKind: S3BlockstoreList
     plural: s3blockstores
     singular: s3blockstore
-  scope: Cluster
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status

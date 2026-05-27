@@ -2,6 +2,7 @@ apiVersion: opsmanager.crossplane.io/v1alpha1
 kind: S3OplogStore
 metadata:
   name: shared-oplog-store
+  namespace: crossplane-system
 spec:
   providerConfigRef:
     name: default
