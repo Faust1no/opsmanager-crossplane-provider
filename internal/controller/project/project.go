@@ -121,9 +121,13 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	meta.SetExternalName(cr, observed.ID)
 	cr.SetConditions(xpv1.Available())
 
+	if len(cr.Spec.ForProvider.LDAPGroupMappings) == 0 && len(observed.LDAPGroupMappings) > 0 {
+		cr.Spec.ForProvider.LDAPGroupMappings = fromSDKMappings(observed.LDAPGroupMappings)
+	}
+
 	return managed.ExternalObservation{
 		ResourceExists:   true,
-		ResourceUpToDate: ldapMappingsMatch(cr.Spec.ForProvider.LDAPGroupMappings, observed.LDAPGroupMappings),
+		ResourceUpToDate: len(cr.Spec.ForProvider.LDAPGroupMappings) == 0 || ldapMappingsMatch(cr.Spec.ForProvider.LDAPGroupMappings, observed.LDAPGroupMappings),
 	}, nil
 }
 
@@ -244,6 +248,19 @@ func ldapMappingsMatch(desired []v1alpha1.LDAPGroupMapping, observed []*opsmngr.
 		}
 	}
 	return true
+}
+
+func fromSDKMappings(mappings []*opsmngr.LDAPGroupMapping) []v1alpha1.LDAPGroupMapping {
+	result := make([]v1alpha1.LDAPGroupMapping, len(mappings))
+	for i, m := range mappings {
+		groups := make([]string, len(m.LDAPGroups))
+		copy(groups, m.LDAPGroups)
+		result[i] = v1alpha1.LDAPGroupMapping{
+			RoleName:   m.RoleName,
+			LDAPGroups: groups,
+		}
+	}
+	return result
 }
 
 func toSDKMappings(mappings []v1alpha1.LDAPGroupMapping) []*opsmngr.LDAPGroupMapping {

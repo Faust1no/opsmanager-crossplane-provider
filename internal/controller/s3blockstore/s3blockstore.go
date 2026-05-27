@@ -110,6 +110,8 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	meta.SetExternalName(cr, id)
 	cr.SetConditions(xpv1.Available())
 
+	lateInitBlockstore(&cr.Spec.ForProvider, observed)
+
 	return managed.ExternalObservation{
 		ResourceExists:   true,
 		ResourceUpToDate: isUpToDate(cr.Spec.ForProvider, observed),
@@ -184,6 +186,62 @@ func (e *external) getAWSSecretKey(ctx context.Context, cr *v1alpha1.S3Blockstor
 
 // --- helpers ---
 
+// lateInitBlockstore populates empty optional spec fields from the API response.
+// Only fills fields that are unset so that user-specified values are never overwritten.
+func lateInitBlockstore(p *v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockstore) {
+	if p.URI == "" {
+		p.URI = o.URI
+	}
+	if p.Labels == nil {
+		p.Labels = o.Labels
+	}
+	if p.AssignmentEnabled == nil {
+		p.AssignmentEnabled = o.AssignmentEnabled
+	}
+	if p.SSL == nil {
+		p.SSL = o.SSL
+	}
+	if p.WriteConcern == "" {
+		p.WriteConcern = o.WriteConcern
+	}
+	if p.EncryptedCredentials == nil {
+		p.EncryptedCredentials = o.EncryptedCredentials
+	}
+	if p.LoadFactor == nil {
+		p.LoadFactor = o.LoadFactor
+	}
+	if p.MaxCapacityGB == nil {
+		p.MaxCapacityGB = o.MaxCapacityGB
+	}
+	if p.Provisioned == nil {
+		p.Provisioned = o.Provisioned
+	}
+	if p.SyncSource == "" {
+		p.SyncSource = o.SyncSource
+	}
+	if p.Username == "" {
+		p.Username = o.Username
+	}
+	if p.AWSAccessKey == "" {
+		p.AWSAccessKey = o.AWSAccessKey
+	}
+	if p.S3MaxConnections == 0 {
+		p.S3MaxConnections = o.S3MaxConnections
+	}
+	if p.PathStyleAccessEnabled == nil {
+		p.PathStyleAccessEnabled = o.PathStyleAccessEnabled
+	}
+	if p.SSEEnabled == nil {
+		p.SSEEnabled = o.SSEEnabled
+	}
+	if p.AcceptedTos == nil {
+		p.AcceptedTos = o.AcceptedTos
+	}
+	if p.DisableProxyS3 == nil {
+		p.DisableProxyS3 = o.DisableProxyS3
+	}
+}
+
 // defaultFalse returns a pointer to false — used to satisfy required *bool API fields.
 func defaultFalse() *bool { f := false; return &f }
 
@@ -228,6 +286,8 @@ func toSDKBlockstore(p v1alpha1.S3BlockstoreParameters, awsSecretKey string) *op
 }
 
 // isUpToDate compares the desired spec against the observed API state.
+// Required fields are always compared. Optional fields are only compared when
+// explicitly set in the spec — unset means "not managed, don't touch".
 // AWS secret key is intentionally excluded — it cannot be read back from the API.
 func isUpToDate(p v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockstore) bool {
 	if p.S3BucketName != o.S3BucketName {
@@ -239,22 +299,22 @@ func isUpToDate(p v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockstore) bool
 	if p.S3AuthMethod != o.S3AuthMethod {
 		return false
 	}
-	if p.AWSAccessKey != o.AWSAccessKey {
+	if p.AWSAccessKey != "" && p.AWSAccessKey != o.AWSAccessKey {
 		return false
 	}
-	if !stringSlicesEqual(p.Labels, o.Labels) {
+	if p.Labels != nil && !stringSlicesEqual(p.Labels, o.Labels) {
 		return false
 	}
-	if !boolPtrEqual(p.AssignmentEnabled, o.AssignmentEnabled) {
+	if p.AssignmentEnabled != nil && !boolPtrEqual(p.AssignmentEnabled, o.AssignmentEnabled) {
 		return false
 	}
-	if !boolPtrEqual(p.PathStyleAccessEnabled, o.PathStyleAccessEnabled) {
+	if p.PathStyleAccessEnabled != nil && !boolPtrEqual(p.PathStyleAccessEnabled, o.PathStyleAccessEnabled) {
 		return false
 	}
-	if !boolPtrEqual(p.SSEEnabled, o.SSEEnabled) {
+	if p.SSEEnabled != nil && !boolPtrEqual(p.SSEEnabled, o.SSEEnabled) {
 		return false
 	}
-	if !boolPtrEqual(p.AcceptedTos, o.AcceptedTos) {
+	if p.AcceptedTos != nil && !boolPtrEqual(p.AcceptedTos, o.AcceptedTos) {
 		return false
 	}
 	return true

@@ -115,6 +115,8 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	meta.SetExternalName(cr, daemonAPIID(observed))
 	cr.SetConditions(xpv1.Available())
 
+	lateInitDaemon(&cr.Spec.ForProvider, observed)
+
 	return managed.ExternalObservation{
 		ResourceExists:   true,
 		ResourceUpToDate: isUpToDate(cr.Spec.ForProvider, observed),
@@ -195,6 +197,49 @@ func daemonAPIID(d *opsmngr.Daemon) string {
 		return d.ID
 	}
 	return d.Machine.Machine + "/" + url.PathEscape(d.Machine.HeadRootDirectory)
+}
+
+// lateInitDaemon populates empty optional spec fields from the API response.
+func lateInitDaemon(p *v1alpha1.BackupDaemonParameters, d *opsmngr.Daemon) {
+	if p.Labels == nil {
+		p.Labels = d.Labels
+	}
+	if p.AssignmentEnabled == nil {
+		p.AssignmentEnabled = d.AssignmentEnabled
+	}
+	if p.URI == "" {
+		p.URI = d.URI
+	}
+	if p.WriteConcern == "" {
+		p.WriteConcern = d.WriteConcern
+	}
+	if p.SSL == nil {
+		p.SSL = d.SSL
+	}
+	if p.EncryptedCredentials == nil {
+		p.EncryptedCredentials = d.EncryptedCredentials
+	}
+	if p.BackupJobsEnabled == nil {
+		p.BackupJobsEnabled = boolPtr(d.BackupJobsEnabled)
+	}
+	if p.GarbageCollectionEnabled == nil {
+		p.GarbageCollectionEnabled = boolPtr(d.GarbageCollectionEnabled)
+	}
+	if p.ResourceUsageEnabled == nil {
+		p.ResourceUsageEnabled = boolPtr(d.ResourceUsageEnabled)
+	}
+	if p.RestoreQueryableJobsEnabled == nil {
+		p.RestoreQueryableJobsEnabled = boolPtr(d.RestoreQueryableJobsEnabled)
+	}
+	if p.HeadDiskType == "" {
+		p.HeadDiskType = d.HeadDiskType
+	}
+	if p.NumWorkers == 0 {
+		p.NumWorkers = d.NumWorkers
+	}
+	if p.HeadRootDirectory == "" && d.Machine != nil {
+		p.HeadRootDirectory = d.Machine.HeadRootDirectory
+	}
 }
 
 // applyParameters merges desired spec fields onto the current daemon,
@@ -286,6 +331,8 @@ func stringSlicesEqual(a, b []string) bool {
 	}
 	return true
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 func boolPtrEqual(a *bool, b *bool) bool {
 	if a == nil && b == nil {
