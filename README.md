@@ -43,8 +43,11 @@ A managed resource is a CR that represents exactly one external object.
 The provider reconciles it continuously — creating, updating, or deleting the
 external object to match the spec. Each managed resource has:
 
-- `spec.forProvider` — the desired state you declare (what you want)
-- `status.atProvider` — read-only state observed from the API (what exists)
+- `spec.forProvider` — the desired state you declare (what you want). On the first
+  reconcile after adopting an existing resource, any optional fields left empty are
+  automatically back-filled from the API — so the spec reflects the full deployed
+  configuration without you having to know it upfront.
+- `status.atProvider` — read-only state observed from the API (IDs, usage metrics)
 - `status.conditions` — `Ready` and `Synced` conditions set by the reconciler
 
 **Reconcile loop**

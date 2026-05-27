@@ -302,6 +302,11 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
     meta.SetExternalName(cr, cr.Spec.ForProvider.ID)
     cr.SetConditions(xpv1.Available())
 
+    // Late initialization: populate empty optional spec fields from the API.
+    // This runs on every Observe but only writes fields that are still unset,
+    // so user-declared values are never overwritten.
+    lateInit<Kind>(&cr.Spec.ForProvider, observed)
+
     return managed.ExternalObservation{
         ResourceExists:   true,
         ResourceUpToDate: isUpToDate(cr.Spec.ForProvider, observed),
@@ -309,13 +314,28 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 }
 ```
 
-**`isUpToDate`** — compare spec against observed state field by field:
+**`lateInit<Kind>`** — back-fill empty optional spec fields from the API response:
+
+```go
+func lateInit<Kind>(p *v1alpha1.<Kind>Parameters, o *opsmngr.<SDKType>) {
+    if p.Labels == nil     { p.Labels = o.Labels }
+    if p.URI == ""         { p.URI = o.URI }
+    if p.SomeField == nil  { p.SomeField = o.SomeField }
+    // ... one guard per optional field
+}
+```
+
+**`isUpToDate`** — compare spec against observed state field by field.
+Required fields are always compared. Optional fields are guarded with a
+nil/zero check so that an unset spec field is treated as "not managed":
 
 ```go
 func isUpToDate(p v1alpha1.<Kind>Parameters, o *opsmngr.<SDKType>) bool {
-    if p.SomeField != o.SomeField { return false }
-    if !stringSlicesEqual(p.Labels, o.Labels) { return false }
-    if !boolPtrEqual(p.AssignmentEnabled, o.AssignmentEnabled) { return false }
+    // required — always compare
+    if p.SomeRequiredField != o.SomeRequiredField { return false }
+    // optional — only compare when set in spec
+    if p.Labels != nil && !stringSlicesEqual(p.Labels, o.Labels) { return false }
+    if p.AssignmentEnabled != nil && !boolPtrEqual(p.AssignmentEnabled, o.AssignmentEnabled) { return false }
     return true
 }
 ```
@@ -391,8 +411,19 @@ applied for the first time (to bring an existing resource under management),
 `Observe` will find it by ID and return `ResourceExists: true`. No special
 handling is needed — the controller adopts it automatically.
 
-If the spec matches the observed state exactly, `isUpToDate` returns true and
-no API call is made. If there is drift, `Update` is called to reconcile it.
+On the first reconcile after adoption, `lateInit<Kind>` populates any optional
+spec fields that are empty with the values observed from the API. This means
+a minimal CR (just the required fields needed to identify the resource) will
+have its spec filled in automatically after the first reconcile, reflecting
+the full configuration that exists in Ops Manager. The user can then edit
+those fields directly to manage them going forward.
+
+Fields that are already set in the spec are never overwritten by late init —
+user-declared values always take precedence.
+
+If the spec matches the observed state exactly after late init, `isUpToDate`
+returns true and no API call is made. If there is drift, `Update` is called
+to reconcile it.
 
 ---
 
