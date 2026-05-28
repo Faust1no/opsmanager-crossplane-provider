@@ -121,9 +121,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	meta.SetExternalName(cr, observed.ID)
 	cr.SetConditions(xpv1.Available())
 
-	if len(cr.Spec.ForProvider.LDAPGroupMappings) == 0 && len(observed.LDAPGroupMappings) > 0 {
-		cr.Spec.ForProvider.LDAPGroupMappings = fromSDKMappings(observed.LDAPGroupMappings)
-	}
+	lateInitProject(&cr.Spec.ForProvider, observed)
 
 	return managed.ExternalObservation{
 		ResourceExists:   true,
@@ -134,6 +132,20 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
 	cr := mg.(*v1alpha1.Project)
 
+	// Check if the project already exists in Ops Manager before creating.
+	existing, _, err := e.service.GetByName(ctx, cr.Spec.ForProvider.Name)
+	if err == nil {
+		// Project exists — adopt it and populate spec from API.
+		cr.Status.AtProvider.ID = existing.ID
+		meta.SetExternalName(cr, existing.ID)
+		lateInitProject(&cr.Spec.ForProvider, existing)
+		return managed.ExternalCreation{}, nil
+	}
+	if !isNotFound(err) {
+		return managed.ExternalCreation{}, errors.Wrap(err, errGetProject)
+	}
+
+	// Project does not exist — create it.
 	project := &opsmngr.Project{
 		Name:              cr.Spec.ForProvider.Name,
 		OrgID:             cr.Spec.ForProvider.OrgID,
@@ -218,6 +230,13 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 }
 
 // --- helpers ---
+
+// lateInitProject populates empty optional spec fields from the API response.
+func lateInitProject(p *v1alpha1.ProjectParameters, o *opsmngr.Project) {
+	if len(p.LDAPGroupMappings) == 0 && len(o.LDAPGroupMappings) > 0 {
+		p.LDAPGroupMappings = fromSDKMappings(o.LDAPGroupMappings)
+	}
+}
 
 func ldapMappingsMatch(desired []v1alpha1.LDAPGroupMapping, observed []*opsmngr.LDAPGroupMapping) bool {
 	if len(desired) != len(observed) {

@@ -123,9 +123,23 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}, nil
 }
 
-// Create is called when the daemon hasn't registered with Ops Manager yet.
-// Return an error so the reconciler requeues and retries.
-func (e *external) Create(_ context.Context, _ resource.Managed) (managed.ExternalCreation, error) {
+// Create is called when Observe did not find the daemon. Check once more before
+// giving up — if it exists, adopt it and populate the spec via late init.
+// If it genuinely isn't registered yet, return an error to requeue and retry.
+func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
+	cr := mg.(*v1alpha1.BackupDaemon)
+
+	existing, err := e.getDaemon(ctx, cr.Spec.ForProvider)
+	if err != nil {
+		return managed.ExternalCreation{}, errors.Wrap(err, errListDaemons)
+	}
+	if existing != nil {
+		cr.Status.AtProvider.Configured = existing.Configured
+		meta.SetExternalName(cr, daemonAPIID(existing))
+		lateInitDaemon(&cr.Spec.ForProvider, existing)
+		return managed.ExternalCreation{}, nil
+	}
+
 	return managed.ExternalCreation{}, errors.New(errDaemonNotFound)
 }
 

@@ -121,6 +121,19 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
 	cr := mg.(*v1alpha1.S3Blockstore)
 
+	// Check if the blockstore already exists in Ops Manager before creating.
+	existing, _, err := e.service.Get(ctx, cr.Spec.ForProvider.ID)
+	if err == nil {
+		// Blockstore exists — adopt it and populate all optional spec fields from API.
+		meta.SetExternalName(cr, cr.Spec.ForProvider.ID)
+		lateInitBlockstore(&cr.Spec.ForProvider, existing)
+		return managed.ExternalCreation{}, nil
+	}
+	if !isNotFound(err) {
+		return managed.ExternalCreation{}, errors.Wrap(err, errGetBlockstore)
+	}
+
+	// Blockstore does not exist — create it.
 	awsSecretKey, err := e.getAWSSecretKey(ctx, cr)
 	if err != nil {
 		return managed.ExternalCreation{}, err
