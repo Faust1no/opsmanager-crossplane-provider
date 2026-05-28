@@ -81,7 +81,7 @@ decided not to, as with `BackupDaemon`).
 
 | Kind | Ops Manager resource |
 |---|---|
-| `Project` | Project with LDAP group mappings |
+| `OpsManagerProject` | Project with LDAP group mappings |
 | `S3Blockstore` | S3-backed snapshot store |
 | `S3OplogStore` | S3-backed oplog store (shared across clusters) |
 | `BackupDaemon` | Backup daemon configuration |

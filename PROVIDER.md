@@ -134,7 +134,7 @@ users whose LDAP group membership matches.
 
 ```yaml
 apiVersion: opsmanager.crossplane.io/v1alpha1
-kind: Project
+kind: OpsManagerProject
 metadata:
   name: my-project
 spec:

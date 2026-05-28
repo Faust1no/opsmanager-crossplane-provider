@@ -10,9 +10,9 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// ---- Project ----
+// ---- OpsManagerProject ----
 
-func (in *Project) DeepCopyInto(out *Project) {
+func (in *OpsManagerProject) DeepCopyInto(out *OpsManagerProject) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
@@ -20,82 +20,82 @@ func (in *Project) DeepCopyInto(out *Project) {
 	in.Status.DeepCopyInto(&out.Status)
 }
 
-func (in *Project) DeepCopy() *Project {
+func (in *OpsManagerProject) DeepCopy() *OpsManagerProject {
 	if in == nil {
 		return nil
 	}
-	out := new(Project)
+	out := new(OpsManagerProject)
 	in.DeepCopyInto(out)
 	return out
 }
 
-func (in *Project) DeepCopyObject() runtime.Object {
+func (in *OpsManagerProject) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
 	return nil
 }
 
-func (in *ProjectList) DeepCopyInto(out *ProjectList) {
+func (in *OpsManagerProjectList) DeepCopyInto(out *OpsManagerProjectList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
-		*out = make([]Project, len(*in))
+		*out = make([]OpsManagerProject, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 }
 
-func (in *ProjectList) DeepCopy() *ProjectList {
+func (in *OpsManagerProjectList) DeepCopy() *OpsManagerProjectList {
 	if in == nil {
 		return nil
 	}
-	out := new(ProjectList)
+	out := new(OpsManagerProjectList)
 	in.DeepCopyInto(out)
 	return out
 }
 
-func (in *ProjectList) DeepCopyObject() runtime.Object {
+func (in *OpsManagerProjectList) DeepCopyObject() runtime.Object {
 	if c := in.DeepCopy(); c != nil {
 		return c
 	}
 	return nil
 }
 
-func (in *ProjectSpec) DeepCopyInto(out *ProjectSpec) {
+func (in *OpsManagerProjectSpec) DeepCopyInto(out *OpsManagerProjectSpec) {
 	*out = *in
 	in.ResourceSpec.DeepCopyInto(&out.ResourceSpec)
 	in.ForProvider.DeepCopyInto(&out.ForProvider)
 }
 
-func (in *ProjectSpec) DeepCopy() *ProjectSpec {
+func (in *OpsManagerProjectSpec) DeepCopy() *OpsManagerProjectSpec {
 	if in == nil {
 		return nil
 	}
-	out := new(ProjectSpec)
+	out := new(OpsManagerProjectSpec)
 	in.DeepCopyInto(out)
 	return out
 }
 
-func (in *ProjectStatus) DeepCopyInto(out *ProjectStatus) {
+func (in *OpsManagerProjectStatus) DeepCopyInto(out *OpsManagerProjectStatus) {
 	*out = *in
 	in.ConditionedStatus.DeepCopyInto(&out.ConditionedStatus)
 	out.AtProvider = in.AtProvider
 }
 
-func (in *ProjectStatus) DeepCopy() *ProjectStatus {
+func (in *OpsManagerProjectStatus) DeepCopy() *OpsManagerProjectStatus {
 	if in == nil {
 		return nil
 	}
-	out := new(ProjectStatus)
+	out := new(OpsManagerProjectStatus)
 	in.DeepCopyInto(out)
 	return out
 }
 
-func (in *ProjectParameters) DeepCopyInto(out *ProjectParameters) {
+func (in *OpsManagerProjectParameters) DeepCopyInto(out *OpsManagerProjectParameters) {
 	*out = *in
 	if in.LDAPGroupMappings != nil {
 		in, out := &in.LDAPGroupMappings, &out.LDAPGroupMappings
@@ -106,11 +106,11 @@ func (in *ProjectParameters) DeepCopyInto(out *ProjectParameters) {
 	}
 }
 
-func (in *ProjectParameters) DeepCopy() *ProjectParameters {
+func (in *OpsManagerProjectParameters) DeepCopy() *OpsManagerProjectParameters {
 	if in == nil {
 		return nil
 	}
-	out := new(ProjectParameters)
+	out := new(OpsManagerProjectParameters)
 	in.DeepCopyInto(out)
 	return out
 }
@@ -133,15 +133,15 @@ func (in *LDAPGroupMapping) DeepCopy() *LDAPGroupMapping {
 	return out
 }
 
-func (in *ProjectObservation) DeepCopyInto(out *ProjectObservation) {
+func (in *OpsManagerProjectObservation) DeepCopyInto(out *OpsManagerProjectObservation) {
 	*out = *in
 }
 
-func (in *ProjectObservation) DeepCopy() *ProjectObservation {
+func (in *OpsManagerProjectObservation) DeepCopy() *OpsManagerProjectObservation {
 	if in == nil {
 		return nil
 	}
-	out := new(ProjectObservation)
+	out := new(OpsManagerProjectObservation)
 	in.DeepCopyInto(out)
 	return out
 }

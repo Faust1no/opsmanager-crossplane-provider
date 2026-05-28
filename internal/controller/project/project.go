@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	errNotProject        = "managed resource is not a Project"
+	errNotProject        = "managed resource is not an OpsManagerProject"
 	errGetProviderConfig = "cannot get ProviderConfig"
 	errCreateClient      = "cannot create Ops Manager client"
 	errTrackUsage           = "cannot track ProviderConfig usage"
@@ -44,10 +44,10 @@ const (
 
 // Setup registers the Project controller with the manager.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
-	name := managed.ControllerName(v1alpha1.ProjectGroupKind.Kind)
+	name := managed.ControllerName(v1alpha1.OpsManagerProjectGroupKind.Kind)
 
 	r := managed.NewReconciler(mgr,
-		resource.ManagedKind(v1alpha1.ProjectGroupVersionKind),
+		resource.ManagedKind(v1alpha1.OpsManagerProjectGroupVersionKind),
 		managed.WithExternalConnecter(&connector{
 			kube:  mgr.GetClient(),
 			usage: resource.NewProviderConfigUsageTracker(mgr.GetClient(), &v1beta1.ProviderConfigUsage{}),
@@ -59,7 +59,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
-		For(&v1alpha1.Project{}).
+		For(&v1alpha1.OpsManagerProject{}).
 		Complete(r)
 }
 
@@ -70,7 +70,7 @@ type connector struct {
 }
 
 func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.Project)
+	cr, ok := mg.(*v1alpha1.OpsManagerProject)
 	if !ok {
 		return nil, errors.New(errNotProject)
 	}
@@ -107,7 +107,7 @@ type external struct {
 }
 
 func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr := mg.(*v1alpha1.Project)
+	cr := mg.(*v1alpha1.OpsManagerProject)
 
 	observed, _, err := e.service.GetByName(ctx, cr.Spec.ForProvider.Name)
 	if isNotFound(err) {
@@ -130,7 +130,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 }
 
 func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr := mg.(*v1alpha1.Project)
+	cr := mg.(*v1alpha1.OpsManagerProject)
 
 	// Check if the project already exists in Ops Manager before creating.
 	existing, _, err := e.service.GetByName(ctx, cr.Spec.ForProvider.Name)
@@ -166,7 +166,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 // Update patches the project's ldapGroupMappings to match the desired spec.
 // Only the mappings field is sent so no other project state is affected.
 func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr := mg.(*v1alpha1.Project)
+	cr := mg.(*v1alpha1.OpsManagerProject)
 
 	patch := &opsmngr.Project{
 		LDAPGroupMappings: toSDKMappings(cr.Spec.ForProvider.LDAPGroupMappings),
@@ -180,7 +180,7 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 }
 
 func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr := mg.(*v1alpha1.Project)
+	cr := mg.(*v1alpha1.OpsManagerProject)
 
 	projectID := cr.Status.AtProvider.ID
 	if projectID == "" {
@@ -232,7 +232,7 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 // --- helpers ---
 
 // lateInitProject populates empty optional spec fields from the API response.
-func lateInitProject(p *v1alpha1.ProjectParameters, o *opsmngr.Project) {
+func lateInitProject(p *v1alpha1.OpsManagerProjectParameters, o *opsmngr.Project) {
 	if len(p.LDAPGroupMappings) == 0 && len(o.LDAPGroupMappings) > 0 {
 		p.LDAPGroupMappings = fromSDKMappings(o.LDAPGroupMappings)
 	}

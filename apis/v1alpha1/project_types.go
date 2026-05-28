@@ -6,11 +6,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// ProjectGroupKind is the GroupKind for the Project resource.
-var ProjectGroupKind = schema.GroupKind{Group: Group, Kind: "Project"}
+// OpsManagerProjectGroupKind is the GroupKind for the OpsManagerProject resource.
+var OpsManagerProjectGroupKind = schema.GroupKind{Group: Group, Kind: "OpsManagerProject"}
 
-// ProjectGroupVersionKind is the GroupVersionKind for the Project resource.
-var ProjectGroupVersionKind = SchemeGroupVersion.WithKind("Project")
+// OpsManagerProjectGroupVersionKind is the GroupVersionKind for the OpsManagerProject resource.
+var OpsManagerProjectGroupVersionKind = SchemeGroupVersion.WithKind("OpsManagerProject")
 
 // LDAPGroupMapping maps an Ops Manager role to one or more LDAP groups.
 type LDAPGroupMapping struct {
@@ -25,8 +25,8 @@ type LDAPGroupMapping struct {
 	LDAPGroups []string `json:"ldapGroups"`
 }
 
-// ProjectParameters are the configurable fields of a Project.
-type ProjectParameters struct {
+// OpsManagerProjectParameters are the configurable fields of an OpsManagerProject.
+type OpsManagerProjectParameters struct {
 	// Name is the display name for the project in Ops Manager.
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
@@ -41,23 +41,23 @@ type ProjectParameters struct {
 	LDAPGroupMappings []LDAPGroupMapping `json:"ldapGroupMappings,omitempty"`
 }
 
-// ProjectObservation holds the observed state of the Project.
-type ProjectObservation struct {
+// OpsManagerProjectObservation holds the observed state of the OpsManagerProject.
+type OpsManagerProjectObservation struct {
 	// ID is the project ID assigned by Ops Manager.
 	// +optional
 	ID string `json:"id,omitempty"`
 }
 
-// ProjectSpec defines the desired state of a Project.
-type ProjectSpec struct {
+// OpsManagerProjectSpec defines the desired state of an OpsManagerProject.
+type OpsManagerProjectSpec struct {
 	xpv1.ResourceSpec `json:",inline"`
-	ForProvider       ProjectParameters `json:"forProvider"`
+	ForProvider       OpsManagerProjectParameters `json:"forProvider"`
 }
 
-// ProjectStatus defines the observed state of a Project.
-type ProjectStatus struct {
+// OpsManagerProjectStatus defines the observed state of an OpsManagerProject.
+type OpsManagerProjectStatus struct {
 	xpv1.ConditionedStatus `json:",inline"`
-	AtProvider             ProjectObservation `json:"atProvider,omitempty"`
+	AtProvider             OpsManagerProjectObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -69,93 +69,97 @@ type ProjectStatus struct {
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="PROJECT-ID",type="string",JSONPath=".status.atProvider.id",priority=1
 
-// Project is a managed resource representing an Ops Manager project.
+// OpsManagerProject is a managed resource representing an Ops Manager project.
 // It can configure LDAP group permission mappings for the project.
-type Project struct {
+type OpsManagerProject struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ProjectSpec   `json:"spec"`
-	Status ProjectStatus `json:"status,omitempty"`
+	Spec   OpsManagerProjectSpec   `json:"spec"`
+	Status OpsManagerProjectStatus `json:"status,omitempty"`
 }
 
 // --- resource.Managed interface forwarding methods ---
 
-// GetCondition of this Project.
-func (mg *Project) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
+// GetCondition of this OpsManagerProject.
+func (mg *OpsManagerProject) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
 	return mg.Status.GetCondition(ct)
 }
 
-// SetConditions of this Project.
-func (mg *Project) SetConditions(c ...xpv1.Condition) {
+// SetConditions of this OpsManagerProject.
+func (mg *OpsManagerProject) SetConditions(c ...xpv1.Condition) {
 	mg.Status.SetConditions(c...)
 }
 
-// GetDeletionPolicy of this Project.
-func (mg *Project) GetDeletionPolicy() xpv1.DeletionPolicy {
+// GetDeletionPolicy of this OpsManagerProject.
+func (mg *OpsManagerProject) GetDeletionPolicy() xpv1.DeletionPolicy {
 	return mg.Spec.DeletionPolicy
 }
 
-// SetDeletionPolicy of this Project.
-func (mg *Project) SetDeletionPolicy(r xpv1.DeletionPolicy) {
+// SetDeletionPolicy of this OpsManagerProject.
+func (mg *OpsManagerProject) SetDeletionPolicy(r xpv1.DeletionPolicy) {
 	mg.Spec.DeletionPolicy = r
 }
 
-// GetManagementPolicies of this Project.
-func (mg *Project) GetManagementPolicies() xpv1.ManagementPolicies {
+// GetManagementPolicies of this OpsManagerProject.
+func (mg *OpsManagerProject) GetManagementPolicies() xpv1.ManagementPolicies {
 	return mg.Spec.ManagementPolicies
 }
 
-// SetManagementPolicies of this Project.
-func (mg *Project) SetManagementPolicies(r xpv1.ManagementPolicies) {
+// SetManagementPolicies of this OpsManagerProject.
+func (mg *OpsManagerProject) SetManagementPolicies(r xpv1.ManagementPolicies) {
 	mg.Spec.ManagementPolicies = r
 }
 
-// GetProviderReference of this Project.
-func (mg *Project) GetProviderReference() *xpv1.Reference { return mg.Spec.ProviderReference }
+// GetProviderReference of this OpsManagerProject.
+func (mg *OpsManagerProject) GetProviderReference() *xpv1.Reference {
+	return mg.Spec.ProviderReference
+}
 
-// SetProviderReference of this Project.
-func (mg *Project) SetProviderReference(r *xpv1.Reference) { mg.Spec.ProviderReference = r }
+// SetProviderReference of this OpsManagerProject.
+func (mg *OpsManagerProject) SetProviderReference(r *xpv1.Reference) {
+	mg.Spec.ProviderReference = r
+}
 
-// GetProviderConfigReference of this Project.
-func (mg *Project) GetProviderConfigReference() *xpv1.Reference {
+// GetProviderConfigReference of this OpsManagerProject.
+func (mg *OpsManagerProject) GetProviderConfigReference() *xpv1.Reference {
 	return mg.Spec.ProviderConfigReference
 }
 
-// SetProviderConfigReference of this Project.
-func (mg *Project) SetProviderConfigReference(r *xpv1.Reference) {
+// SetProviderConfigReference of this OpsManagerProject.
+func (mg *OpsManagerProject) SetProviderConfigReference(r *xpv1.Reference) {
 	mg.Spec.ProviderConfigReference = r
 }
 
-// GetPublishConnectionDetailsTo of this Project.
-func (mg *Project) GetPublishConnectionDetailsTo() *xpv1.PublishConnectionDetailsTo {
+// GetPublishConnectionDetailsTo of this OpsManagerProject.
+func (mg *OpsManagerProject) GetPublishConnectionDetailsTo() *xpv1.PublishConnectionDetailsTo {
 	return mg.Spec.PublishConnectionDetailsTo
 }
 
-// SetPublishConnectionDetailsTo of this Project.
-func (mg *Project) SetPublishConnectionDetailsTo(r *xpv1.PublishConnectionDetailsTo) {
+// SetPublishConnectionDetailsTo of this OpsManagerProject.
+func (mg *OpsManagerProject) SetPublishConnectionDetailsTo(r *xpv1.PublishConnectionDetailsTo) {
 	mg.Spec.PublishConnectionDetailsTo = r
 }
 
-// GetWriteConnectionSecretToReference of this Project.
-func (mg *Project) GetWriteConnectionSecretToReference() *xpv1.SecretReference {
+// GetWriteConnectionSecretToReference of this OpsManagerProject.
+func (mg *OpsManagerProject) GetWriteConnectionSecretToReference() *xpv1.SecretReference {
 	return mg.Spec.WriteConnectionSecretToReference
 }
 
-// SetWriteConnectionSecretToReference of this Project.
-func (mg *Project) SetWriteConnectionSecretToReference(r *xpv1.SecretReference) {
+// SetWriteConnectionSecretToReference of this OpsManagerProject.
+func (mg *OpsManagerProject) SetWriteConnectionSecretToReference(r *xpv1.SecretReference) {
 	mg.Spec.WriteConnectionSecretToReference = r
 }
 
 // +kubebuilder:object:root=true
 
-// ProjectList contains a list of Project.
-type ProjectList struct {
+// OpsManagerProjectList contains a list of OpsManagerProject.
+type OpsManagerProjectList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Project `json:"items"`
+	Items           []OpsManagerProject `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Project{}, &ProjectList{})
+	SchemeBuilder.Register(&OpsManagerProject{}, &OpsManagerProjectList{})
 }

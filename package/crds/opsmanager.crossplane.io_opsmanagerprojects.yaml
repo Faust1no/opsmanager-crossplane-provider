@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: projects.opsmanager.crossplane.io
+  name: opsmanagerprojects.opsmanager.crossplane.io
 spec:
   group: opsmanager.crossplane.io
   names:
     categories:
     - crossplane
-    kind: Project
-    listKind: ProjectList
-    plural: projects
-    singular: project
+    kind: OpsManagerProject
+    listKind: OpsManagerProjectList
+    plural: opsmanagerprojects
+    singular: opsmanagerproject
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -34,7 +34,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          Project is a managed resource representing an Ops Manager project.
+          OpsManagerProject is a managed resource representing an Ops Manager project.
           It can configure LDAP group permission mappings for the project.
         properties:
           apiVersion:
@@ -72,7 +72,7 @@ spec:
                 - Delete
                 type: string
               forProvider:
-                description: ProjectParameters are the configurable fields of a Project.
+                description: OpsManagerProjectParameters are the configurable fields of an OpsManagerProject.
                 properties:
                   ldapGroupMappings:
                     description: |-
@@ -320,10 +320,10 @@ spec:
             - forProvider
             type: object
           status:
-            description: ProjectStatus defines the observed state of a Project.
+            description: OpsManagerProjectStatus defines the observed state of an OpsManagerProject.
             properties:
               atProvider:
-                description: ProjectObservation holds the observed state of the Project.
+                description: OpsManagerProjectObservation holds the observed state of the OpsManagerProject.
                 properties:
                   id:
                     description: ID is the project ID assigned by Ops Manager.

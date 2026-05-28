@@ -27,7 +27,7 @@ Verify they are registered:
 kubectl get crds | grep opsmanager
 # Expected:
 # backupdaemons.opsmanager.crossplane.io
-# projects.opsmanager.crossplane.io
+# opsmanagerprojects.opsmanager.crossplane.io
 # providerconfigs.opsmanager.crossplane.io
 # providerconfigusages.opsmanager.crossplane.io
 # s3blockstores.opsmanager.crossplane.io
@@ -94,10 +94,10 @@ Leave this running in a terminal. It watches for CRs and reconciles them.
 kubectl apply -f examples/project.yaml
 
 # Watch status
-kubectl get project test-project -w
+kubectl get opsmanagerproject test-project -w
 
 # Once READY=True, inspect the result
-kubectl describe project test-project
+kubectl describe opsmanagerproject test-project
 ```
 
 Verify in Ops Manager UI → **Projects** — the project should appear with
@@ -181,16 +181,16 @@ the daemon should show the `my-cluster` label.
 
 ```bash
 # See all managed resources and their status
-kubectl get project,s3blockstore,s3oplogstore,backupdaemon
+kubectl get opsmanagerproject,s3blockstore,s3oplogstore,backupdaemon
 
 # Check conditions on a resource
-kubectl get project test-project -o jsonpath='{.status.conditions}' | jq
+kubectl get opsmanagerproject test-project -o jsonpath='{.status.conditions}' | jq
 
 # Check which resources are using the ProviderConfig
 kubectl get providerconfigusages
 
 # Force a re-reconcile by adding an annotation
-kubectl annotate project test-project reconcile=now --overwrite
+kubectl annotate opsmanagerproject test-project reconcile=now --overwrite
 ```
 
 ---
