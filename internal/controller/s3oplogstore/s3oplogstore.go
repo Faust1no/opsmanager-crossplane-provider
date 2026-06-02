@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"net/http"
+	"time"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
@@ -47,6 +48,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
+		managed.WithTimeout(5*time.Minute),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -166,8 +168,26 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 
 func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 	cr := mg.(*v1alpha1.S3OplogStore)
+	id := cr.Spec.ForProvider.ID
 
-	_, err := e.service.Delete(ctx, cr.Spec.ForProvider.ID)
+	current, _, err := e.service.Get(ctx, id)
+	if isNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, errGetOplogStore)
+	}
+
+	// Ops Manager rejects deletion with 409 if assignmentEnabled is true.
+	if current.AssignmentEnabled != nil && *current.AssignmentEnabled {
+		f := false
+		current.AssignmentEnabled = &f
+		if _, _, err := e.service.Update(ctx, id, current); err != nil {
+			return errors.Wrap(err, errUpdateOplogStore)
+		}
+	}
+
+	_, err = e.service.Delete(ctx, id)
 	if isNotFound(err) {
 		return nil
 	}
