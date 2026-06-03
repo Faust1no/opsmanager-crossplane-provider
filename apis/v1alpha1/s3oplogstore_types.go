@@ -163,8 +163,6 @@ func (mg *S3OplogStore) GetManagementPolicies() xpv1.ManagementPolicies {
 func (mg *S3OplogStore) SetManagementPolicies(r xpv1.ManagementPolicies) {
 	mg.Spec.ManagementPolicies = r
 }
-func (mg *S3OplogStore) GetProviderReference() *xpv1.Reference { return mg.Spec.ProviderReference }
-func (mg *S3OplogStore) SetProviderReference(r *xpv1.Reference) { mg.Spec.ProviderReference = r }
 func (mg *S3OplogStore) GetProviderConfigReference() *xpv1.Reference {
 	return mg.Spec.ProviderConfigReference
 }

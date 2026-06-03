@@ -187,12 +187,6 @@ func (mg *S3Blockstore) SetManagementPolicies(r xpv1.ManagementPolicies) {
 	mg.Spec.ManagementPolicies = r
 }
 
-// GetProviderReference of this S3Blockstore.
-func (mg *S3Blockstore) GetProviderReference() *xpv1.Reference { return mg.Spec.ProviderReference }
-
-// SetProviderReference of this S3Blockstore.
-func (mg *S3Blockstore) SetProviderReference(r *xpv1.Reference) { mg.Spec.ProviderReference = r }
-
 // GetProviderConfigReference of this S3Blockstore.
 func (mg *S3Blockstore) GetProviderConfigReference() *xpv1.Reference {
 	return mg.Spec.ProviderConfigReference

@@ -150,12 +150,6 @@ func (mg *BackupDaemon) SetManagementPolicies(r xpv1.ManagementPolicies) {
 	mg.Spec.ManagementPolicies = r
 }
 
-// GetProviderReference of this BackupDaemon.
-func (mg *BackupDaemon) GetProviderReference() *xpv1.Reference { return mg.Spec.ProviderReference }
-
-// SetProviderReference of this BackupDaemon.
-func (mg *BackupDaemon) SetProviderReference(r *xpv1.Reference) { mg.Spec.ProviderReference = r }
-
 // GetProviderConfigReference of this BackupDaemon.
 func (mg *BackupDaemon) GetProviderConfigReference() *xpv1.Reference {
 	return mg.Spec.ProviderConfigReference

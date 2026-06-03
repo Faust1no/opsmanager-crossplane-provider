@@ -54,7 +54,6 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
-		managed.WithCriticalAnnotationUpdater(clients.NewNamespacedCriticalAnnotationUpdater(mgr.GetClient())),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).

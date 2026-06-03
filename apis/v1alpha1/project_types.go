@@ -111,16 +111,6 @@ func (mg *OpsManagerProject) SetManagementPolicies(r xpv1.ManagementPolicies) {
 	mg.Spec.ManagementPolicies = r
 }
 
-// GetProviderReference of this OpsManagerProject.
-func (mg *OpsManagerProject) GetProviderReference() *xpv1.Reference {
-	return mg.Spec.ProviderReference
-}
-
-// SetProviderReference of this OpsManagerProject.
-func (mg *OpsManagerProject) SetProviderReference(r *xpv1.Reference) {
-	mg.Spec.ProviderReference = r
-}
-
 // GetProviderConfigReference of this OpsManagerProject.
 func (mg *OpsManagerProject) GetProviderConfigReference() *xpv1.Reference {
 	return mg.Spec.ProviderConfigReference
