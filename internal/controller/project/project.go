@@ -146,10 +146,12 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	}
 
 	// Project does not exist — create it.
+	f := false
 	project := &opsmngr.Project{
-		Name:              cr.Spec.ForProvider.Name,
-		OrgID:             cr.Spec.ForProvider.OrgID,
-		LDAPGroupMappings: toSDKMappings(cr.Spec.ForProvider.LDAPGroupMappings),
+		Name:                      cr.Spec.ForProvider.Name,
+		OrgID:                     cr.Spec.ForProvider.OrgID,
+		LDAPGroupMappings:         toSDKMappings(cr.Spec.ForProvider.LDAPGroupMappings),
+		WithDefaultAlertsSettings: &f,
 	}
 
 	created, _, err := e.service.Create(ctx, project, nil)

@@ -112,11 +112,12 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	meta.SetExternalName(cr, id)
 	cr.SetConditions(xpv1.Available())
 
-	lateInitOplogStore(&cr.Spec.ForProvider, observed)
+	lateInitialized := lateInitOplogStore(&cr.Spec.ForProvider, observed)
 
 	return managed.ExternalObservation{
-		ResourceExists:   true,
-		ResourceUpToDate: isUpToDate(cr.Spec.ForProvider, observed),
+		ResourceExists:          true,
+		ResourceUpToDate:        isUpToDate(cr.Spec.ForProvider, observed),
+		ResourceLateInitialized: lateInitialized,
 	}, nil
 }
 
@@ -217,59 +218,60 @@ func (e *external) getAWSSecretKey(ctx context.Context, cr *v1alpha1.S3OplogStor
 
 // --- helpers ---
 
-// lateInitOplogStore populates empty optional spec fields from the API response.
-func lateInitOplogStore(p *v1alpha1.S3OplogStoreParameters, o *opsmngr.S3Blockstore) {
-	if p.URI == "" {
-		p.URI = o.URI
+// lateInitOplogStore populates empty spec fields from the API response.
+// Returns true if any field was changed.
+func lateInitOplogStore(p *v1alpha1.S3OplogStoreParameters, o *opsmngr.S3Blockstore) bool {
+	changed := false
+	set := func(dst *string, src string) {
+		if *dst == "" && src != "" {
+			*dst = src
+			changed = true
+		}
 	}
-	if p.Labels == nil {
-		p.Labels = o.Labels
+	setPtr := func(dst **bool, src *bool) {
+		if *dst == nil && src != nil {
+			*dst = src
+			changed = true
+		}
 	}
-	if p.AssignmentEnabled == nil {
-		p.AssignmentEnabled = o.AssignmentEnabled
+	setPtrInt64 := func(dst **int64, src *int64) {
+		if *dst == nil && src != nil {
+			*dst = src
+			changed = true
+		}
 	}
-	if p.SSL == nil {
-		p.SSL = o.SSL
+	setInt := func(dst *int64, src int64) {
+		if *dst == 0 && src != 0 {
+			*dst = src
+			changed = true
+		}
 	}
-	if p.WriteConcern == "" {
-		p.WriteConcern = o.WriteConcern
+	setSlice := func(dst *[]string, src []string) {
+		if *dst == nil && len(src) > 0 {
+			*dst = src
+			changed = true
+		}
 	}
-	if p.EncryptedCredentials == nil {
-		p.EncryptedCredentials = o.EncryptedCredentials
-	}
-	if p.LoadFactor == nil {
-		p.LoadFactor = o.LoadFactor
-	}
-	if p.MaxCapacityGB == nil {
-		p.MaxCapacityGB = o.MaxCapacityGB
-	}
-	if p.Provisioned == nil {
-		p.Provisioned = o.Provisioned
-	}
-	if p.SyncSource == "" {
-		p.SyncSource = o.SyncSource
-	}
-	if p.Username == "" {
-		p.Username = o.Username
-	}
-	if p.AWSAccessKey == "" {
-		p.AWSAccessKey = o.AWSAccessKey
-	}
-	if p.S3MaxConnections == 0 {
-		p.S3MaxConnections = o.S3MaxConnections
-	}
-	if p.PathStyleAccessEnabled == nil {
-		p.PathStyleAccessEnabled = o.PathStyleAccessEnabled
-	}
-	if p.SSEEnabled == nil {
-		p.SSEEnabled = o.SSEEnabled
-	}
-	if p.AcceptedTos == nil {
-		p.AcceptedTos = o.AcceptedTos
-	}
-	if p.DisableProxyS3 == nil {
-		p.DisableProxyS3 = o.DisableProxyS3
-	}
+	set(&p.URI, o.URI)
+	set(&p.S3BucketEndpoint, o.S3BucketEndpoint)
+	set(&p.S3AuthMethod, o.S3AuthMethod)
+	set(&p.WriteConcern, o.WriteConcern)
+	set(&p.SyncSource, o.SyncSource)
+	set(&p.Username, o.Username)
+	set(&p.AWSAccessKey, o.AWSAccessKey)
+	setSlice(&p.Labels, o.Labels)
+	setPtr(&p.AssignmentEnabled, o.AssignmentEnabled)
+	setPtr(&p.SSL, o.SSL)
+	setPtr(&p.EncryptedCredentials, o.EncryptedCredentials)
+	setPtrInt64(&p.LoadFactor, o.LoadFactor)
+	setPtrInt64(&p.MaxCapacityGB, o.MaxCapacityGB)
+	setPtr(&p.Provisioned, o.Provisioned)
+	setInt(&p.S3MaxConnections, o.S3MaxConnections)
+	setPtr(&p.PathStyleAccessEnabled, o.PathStyleAccessEnabled)
+	setPtr(&p.SSEEnabled, o.SSEEnabled)
+	setPtr(&p.AcceptedTos, o.AcceptedTos)
+	setPtr(&p.DisableProxyS3, o.DisableProxyS3)
+	return changed
 }
 
 func defaultFalse() *bool { f := false; return &f }

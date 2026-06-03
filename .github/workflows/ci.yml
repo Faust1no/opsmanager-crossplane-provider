@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  changelog:
+    name: Require CHANGELOG update
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check CHANGELOG.md was modified
+        run: |
+          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          if ! echo "$changed" | grep -q '^CHANGELOG.md$'; then
+            echo "ERROR: CHANGELOG.md was not updated in this PR."
+            echo "Add an entry under [Unreleased] in CHANGELOG.md before merging."
+            exit 1
+          fi
+          echo "CHANGELOG.md is updated."
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.11.4
+          args: --timeout=5m
