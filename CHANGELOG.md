@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
+### Fixed
+- `S3Blockstore` and `S3OplogStore` labels can now be fully deleted via YAML.
+  `isUpToDate` now always compares labels once the `opsmanager.crossplane.io/labels-adopted`
+  annotation is set, treating a nil spec as "user wants no labels" and triggering an Update
+  to clear them in the API.
 
 ## [1.1.1] - 2026-06-04
 ### Fixed
