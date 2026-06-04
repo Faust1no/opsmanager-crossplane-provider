@@ -34,6 +34,10 @@ const (
 	errUpdateBlockstore  = "cannot update S3 blockstore in Ops Manager"
 	errDeleteBlockstore  = "cannot delete S3 blockstore from Ops Manager"
 	errGetAWSSecret      = "cannot get AWS secret key from Kubernetes secret"
+
+	// annotationLabelsAdopted is set after the first Observe so that labels are
+	// adopted from the API exactly once. After that, the spec YAML is authoritative.
+	annotationLabelsAdopted = "opsmanager.crossplane.io/labels-adopted"
 )
 
 // Setup registers the S3Blockstore controller with the manager.
@@ -113,6 +117,21 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	cr.SetConditions(xpv1.Available())
 
 	lateInitialized := lateInitBlockstore(&cr.Spec.ForProvider, observed)
+
+	// Adopt labels from the API exactly once. After the annotation is set,
+	// the spec YAML is authoritative and labels are never overwritten.
+	ann := cr.GetAnnotations()
+	if ann[annotationLabelsAdopted] != "true" {
+		if cr.Spec.ForProvider.Labels == nil && len(observed.Labels) > 0 {
+			cr.Spec.ForProvider.Labels = observed.Labels
+		}
+		if ann == nil {
+			ann = make(map[string]string)
+		}
+		ann[annotationLabelsAdopted] = "true"
+		cr.SetAnnotations(ann)
+		lateInitialized = true
+	}
 
 	return managed.ExternalObservation{
 		ResourceExists:          true,
@@ -248,12 +267,6 @@ func lateInitBlockstore(p *v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockst
 			changed = true
 		}
 	}
-	setSlice := func(dst *[]string, src []string) {
-		if *dst == nil && len(src) > 0 {
-			*dst = src
-			changed = true
-		}
-	}
 	set(&p.URI, o.URI)
 	set(&p.S3BucketEndpoint, o.S3BucketEndpoint)
 	set(&p.S3AuthMethod, o.S3AuthMethod)
@@ -261,7 +274,6 @@ func lateInitBlockstore(p *v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockst
 	set(&p.SyncSource, o.SyncSource)
 	set(&p.Username, o.Username)
 	set(&p.AWSAccessKey, o.AWSAccessKey)
-	setSlice(&p.Labels, o.Labels)
 	setPtr(&p.AssignmentEnabled, o.AssignmentEnabled)
 	setPtr(&p.SSL, o.SSL)
 	setPtr(&p.EncryptedCredentials, o.EncryptedCredentials)
