@@ -1,7 +1,8 @@
 package v1alpha1
 
 import (
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
+	xpv2 "github.com/crossplane/crossplane-runtime/v2/apis/common/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -20,8 +21,6 @@ type BackupDaemonParameters struct {
 	// Example: "ops-manager-backup-daemon-0.ops-manager-backup-daemon-svc.mongodb.svc.cluster.local"
 	// +kubebuilder:validation:MinLength=1
 	Machine string `json:"machine"`
-
-	// --- From AdminBackupConfig ---
 
 	// Labels are the assignment labels for this daemon.
 	// Backup jobs for clusters whose labels match will be handled by this daemon.
@@ -47,8 +46,6 @@ type BackupDaemonParameters struct {
 	// EncryptedCredentials indicates whether the credentials are encrypted.
 	// +optional
 	EncryptedCredentials *bool `json:"encryptedCredentials,omitempty"`
-
-	// --- From Daemon ---
 
 	// BackupJobsEnabled controls whether backup jobs run on this daemon.
 	// +optional
@@ -88,14 +85,14 @@ type BackupDaemonObservation struct {
 
 // BackupDaemonSpec defines the desired state of a BackupDaemon.
 type BackupDaemonSpec struct {
-	xpv1.ResourceSpec `json:",inline"`
-	ForProvider       BackupDaemonParameters `json:"forProvider"`
+	xpv2.ManagedResourceSpec `json:",inline"`
+	ForProvider              BackupDaemonParameters `json:"forProvider"`
 }
 
 // BackupDaemonStatus defines the observed state of a BackupDaemon.
 type BackupDaemonStatus struct {
-	xpv1.ConditionedStatus `json:",inline"`
-	AtProvider             BackupDaemonObservation `json:"atProvider,omitempty"`
+	xpv1.ResourceStatus `json:",inline"`
+	AtProvider          BackupDaemonObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -116,68 +113,6 @@ type BackupDaemon struct {
 
 	Spec   BackupDaemonSpec   `json:"spec"`
 	Status BackupDaemonStatus `json:"status,omitempty"`
-}
-
-// --- resource.Managed interface forwarding methods ---
-
-// GetCondition of this BackupDaemon.
-func (mg *BackupDaemon) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
-	return mg.Status.GetCondition(ct)
-}
-
-// SetConditions of this BackupDaemon.
-func (mg *BackupDaemon) SetConditions(c ...xpv1.Condition) {
-	mg.Status.SetConditions(c...)
-}
-
-// GetDeletionPolicy of this BackupDaemon.
-func (mg *BackupDaemon) GetDeletionPolicy() xpv1.DeletionPolicy {
-	return mg.Spec.DeletionPolicy
-}
-
-// SetDeletionPolicy of this BackupDaemon.
-func (mg *BackupDaemon) SetDeletionPolicy(r xpv1.DeletionPolicy) {
-	mg.Spec.DeletionPolicy = r
-}
-
-// GetManagementPolicies of this BackupDaemon.
-func (mg *BackupDaemon) GetManagementPolicies() xpv1.ManagementPolicies {
-	return mg.Spec.ManagementPolicies
-}
-
-// SetManagementPolicies of this BackupDaemon.
-func (mg *BackupDaemon) SetManagementPolicies(r xpv1.ManagementPolicies) {
-	mg.Spec.ManagementPolicies = r
-}
-
-// GetProviderConfigReference of this BackupDaemon.
-func (mg *BackupDaemon) GetProviderConfigReference() *xpv1.Reference {
-	return mg.Spec.ProviderConfigReference
-}
-
-// SetProviderConfigReference of this BackupDaemon.
-func (mg *BackupDaemon) SetProviderConfigReference(r *xpv1.Reference) {
-	mg.Spec.ProviderConfigReference = r
-}
-
-// GetPublishConnectionDetailsTo of this BackupDaemon.
-func (mg *BackupDaemon) GetPublishConnectionDetailsTo() *xpv1.PublishConnectionDetailsTo {
-	return mg.Spec.PublishConnectionDetailsTo
-}
-
-// SetPublishConnectionDetailsTo of this BackupDaemon.
-func (mg *BackupDaemon) SetPublishConnectionDetailsTo(r *xpv1.PublishConnectionDetailsTo) {
-	mg.Spec.PublishConnectionDetailsTo = r
-}
-
-// GetWriteConnectionSecretToReference of this BackupDaemon.
-func (mg *BackupDaemon) GetWriteConnectionSecretToReference() *xpv1.SecretReference {
-	return mg.Spec.WriteConnectionSecretToReference
-}
-
-// SetWriteConnectionSecretToReference of this BackupDaemon.
-func (mg *BackupDaemon) SetWriteConnectionSecretToReference(r *xpv1.SecretReference) {
-	mg.Spec.WriteConnectionSecretToReference = r
 }
 
 // +kubebuilder:object:root=true

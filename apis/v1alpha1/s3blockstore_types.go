@@ -1,7 +1,8 @@
 package v1alpha1
 
 import (
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
+	xpv2 "github.com/crossplane/crossplane-runtime/v2/apis/common/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -18,8 +19,6 @@ type S3BlockstoreParameters struct {
 	// ID is the unique identifier for this S3 blockstore in Ops Manager.
 	// +kubebuilder:validation:MinLength=1
 	ID string `json:"id"`
-
-	// --- From AdminBackupConfig ---
 
 	// URI is the connection string for the blockstore's MongoDB process (if applicable).
 	// +optional
@@ -47,8 +46,6 @@ type S3BlockstoreParameters struct {
 	// +optional
 	EncryptedCredentials *bool `json:"encryptedCredentials,omitempty"`
 
-	// --- From BackupStore ---
-
 	// LoadFactor is the relative weight for backup job distribution across stores.
 	// +optional
 	LoadFactor *int64 `json:"loadFactor,omitempty"`
@@ -68,8 +65,6 @@ type S3BlockstoreParameters struct {
 	// Username for authentication to the blockstore.
 	// +optional
 	Username string `json:"username,omitempty"`
-
-	// --- S3-specific fields ---
 
 	// S3BucketEndpoint is the S3-compatible endpoint URL.
 	// +kubebuilder:validation:MinLength=1
@@ -125,14 +120,14 @@ type S3BlockstoreObservation struct {
 
 // S3BlockstoreSpec defines the desired state of an S3Blockstore.
 type S3BlockstoreSpec struct {
-	xpv1.ResourceSpec `json:",inline"`
-	ForProvider       S3BlockstoreParameters `json:"forProvider"`
+	xpv2.ManagedResourceSpec `json:",inline"`
+	ForProvider              S3BlockstoreParameters `json:"forProvider"`
 }
 
 // S3BlockstoreStatus defines the observed state of an S3Blockstore.
 type S3BlockstoreStatus struct {
-	xpv1.ConditionedStatus `json:",inline"`
-	AtProvider             S3BlockstoreObservation `json:"atProvider,omitempty"`
+	xpv1.ResourceStatus `json:",inline"`
+	AtProvider          S3BlockstoreObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -153,68 +148,6 @@ type S3Blockstore struct {
 
 	Spec   S3BlockstoreSpec   `json:"spec"`
 	Status S3BlockstoreStatus `json:"status,omitempty"`
-}
-
-// --- resource.Managed interface forwarding methods ---
-
-// GetCondition of this S3Blockstore.
-func (mg *S3Blockstore) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
-	return mg.Status.GetCondition(ct)
-}
-
-// SetConditions of this S3Blockstore.
-func (mg *S3Blockstore) SetConditions(c ...xpv1.Condition) {
-	mg.Status.SetConditions(c...)
-}
-
-// GetDeletionPolicy of this S3Blockstore.
-func (mg *S3Blockstore) GetDeletionPolicy() xpv1.DeletionPolicy {
-	return mg.Spec.DeletionPolicy
-}
-
-// SetDeletionPolicy of this S3Blockstore.
-func (mg *S3Blockstore) SetDeletionPolicy(r xpv1.DeletionPolicy) {
-	mg.Spec.DeletionPolicy = r
-}
-
-// GetManagementPolicies of this S3Blockstore.
-func (mg *S3Blockstore) GetManagementPolicies() xpv1.ManagementPolicies {
-	return mg.Spec.ManagementPolicies
-}
-
-// SetManagementPolicies of this S3Blockstore.
-func (mg *S3Blockstore) SetManagementPolicies(r xpv1.ManagementPolicies) {
-	mg.Spec.ManagementPolicies = r
-}
-
-// GetProviderConfigReference of this S3Blockstore.
-func (mg *S3Blockstore) GetProviderConfigReference() *xpv1.Reference {
-	return mg.Spec.ProviderConfigReference
-}
-
-// SetProviderConfigReference of this S3Blockstore.
-func (mg *S3Blockstore) SetProviderConfigReference(r *xpv1.Reference) {
-	mg.Spec.ProviderConfigReference = r
-}
-
-// GetPublishConnectionDetailsTo of this S3Blockstore.
-func (mg *S3Blockstore) GetPublishConnectionDetailsTo() *xpv1.PublishConnectionDetailsTo {
-	return mg.Spec.PublishConnectionDetailsTo
-}
-
-// SetPublishConnectionDetailsTo of this S3Blockstore.
-func (mg *S3Blockstore) SetPublishConnectionDetailsTo(r *xpv1.PublishConnectionDetailsTo) {
-	mg.Spec.PublishConnectionDetailsTo = r
-}
-
-// GetWriteConnectionSecretToReference of this S3Blockstore.
-func (mg *S3Blockstore) GetWriteConnectionSecretToReference() *xpv1.SecretReference {
-	return mg.Spec.WriteConnectionSecretToReference
-}
-
-// SetWriteConnectionSecretToReference of this S3Blockstore.
-func (mg *S3Blockstore) SetWriteConnectionSecretToReference(r *xpv1.SecretReference) {
-	mg.Spec.WriteConnectionSecretToReference = r
 }
 
 // +kubebuilder:object:root=true

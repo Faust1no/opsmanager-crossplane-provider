@@ -1,7 +1,8 @@
 package v1beta1
 
 import (
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
+	xpv2 "github.com/crossplane/crossplane-runtime/v2/apis/common/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -94,31 +95,7 @@ type ProviderConfigUsage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// ProviderConfigReference to the provider config being used.
-	ProviderConfigReference xpv1.Reference `json:"providerConfigRef"`
-
-	// ResourceReference to the managed resource using the provider config.
-	ResourceReference xpv1.TypedReference `json:"resourceRef"`
-}
-
-// GetProviderConfigReference of this ProviderConfigUsage.
-func (p *ProviderConfigUsage) GetProviderConfigReference() xpv1.Reference {
-	return p.ProviderConfigReference
-}
-
-// SetProviderConfigReference of this ProviderConfigUsage.
-func (p *ProviderConfigUsage) SetProviderConfigReference(r xpv1.Reference) {
-	p.ProviderConfigReference = r
-}
-
-// GetResourceReference of this ProviderConfigUsage.
-func (p *ProviderConfigUsage) GetResourceReference() xpv1.TypedReference {
-	return p.ResourceReference
-}
-
-// SetResourceReference of this ProviderConfigUsage.
-func (p *ProviderConfigUsage) SetResourceReference(r xpv1.TypedReference) {
-	p.ResourceReference = r
+	xpv2.TypedProviderConfigUsage `json:",inline"`
 }
 
 // +kubebuilder:object:root=true

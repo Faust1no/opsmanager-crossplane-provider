@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"time"
 
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	"github.com/crossplane/crossplane-runtime/pkg/controller"
-	"github.com/crossplane/crossplane-runtime/pkg/event"
-	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	"github.com/pkg/errors"
 	"go.mongodb.org/ops-manager/opsmngr"
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +25,6 @@ import (
 )
 
 const (
-	errNotS3OplogStore   = "managed resource is not an S3OplogStore"
 	errGetProviderConfig = "cannot get ProviderConfig"
 	errCreateClient      = "cannot create Ops Manager client"
 	errTrackUsage        = "cannot track ProviderConfig usage"
@@ -46,7 +45,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 
 	r := managed.NewReconciler(mgr,
 		resource.ManagedKind(v1alpha1.S3OplogStoreGroupVersionKind),
-		managed.WithExternalConnecter(&connector{
+		managed.WithTypedExternalConnector[*v1alpha1.S3OplogStore](&connector{
 			kube:  mgr.GetClient(),
 			usage: resource.NewProviderConfigUsageTracker(mgr.GetClient(), &v1beta1.ProviderConfigUsage{}),
 		}),
@@ -67,13 +66,8 @@ type connector struct {
 	usage *resource.ProviderConfigUsageTracker
 }
 
-func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.S3OplogStore)
-	if !ok {
-		return nil, errors.New(errNotS3OplogStore)
-	}
-
-	if err := c.usage.Track(ctx, mg); err != nil {
+func (c *connector) Connect(ctx context.Context, cr *v1alpha1.S3OplogStore) (managed.TypedExternalClient[*v1alpha1.S3OplogStore], error) {
+	if err := c.usage.Track(ctx, cr); err != nil {
 		return nil, errors.Wrap(err, errTrackUsage)
 	}
 
@@ -100,8 +94,7 @@ type external struct {
 	kube    client.Client
 }
 
-func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr := mg.(*v1alpha1.S3OplogStore)
+func (e *external) Observe(ctx context.Context, cr *v1alpha1.S3OplogStore) (managed.ExternalObservation, error) {
 	id := cr.Spec.ForProvider.ID
 
 	observed, _, err := e.service.Get(ctx, id)
@@ -142,9 +135,7 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	}, nil
 }
 
-func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr := mg.(*v1alpha1.S3OplogStore)
-
+func (e *external) Create(ctx context.Context, cr *v1alpha1.S3OplogStore) (managed.ExternalCreation, error) {
 	// Check if the oplog store already exists in Ops Manager before creating.
 	existing, _, err := e.service.Get(ctx, cr.Spec.ForProvider.ID)
 	if err == nil {
@@ -172,9 +163,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	return managed.ExternalCreation{}, nil
 }
 
-func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr := mg.(*v1alpha1.S3OplogStore)
-
+func (e *external) Update(ctx context.Context, cr *v1alpha1.S3OplogStore) (managed.ExternalUpdate, error) {
 	awsSecretKey, err := e.getAWSSecretKey(ctx, cr)
 	if err != nil {
 		return managed.ExternalUpdate{}, err
@@ -188,16 +177,15 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 	return managed.ExternalUpdate{}, nil
 }
 
-func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
-	cr := mg.(*v1alpha1.S3OplogStore)
+func (e *external) Delete(ctx context.Context, cr *v1alpha1.S3OplogStore) (managed.ExternalDelete, error) {
 	id := cr.Spec.ForProvider.ID
 
 	current, _, err := e.service.Get(ctx, id)
 	if isNotFound(err) {
-		return nil
+		return managed.ExternalDelete{}, nil
 	}
 	if err != nil {
-		return errors.Wrap(err, errGetOplogStore)
+		return managed.ExternalDelete{}, errors.Wrap(err, errGetOplogStore)
 	}
 
 	// Ops Manager rejects deletion with 409 if assignmentEnabled is true.
@@ -205,16 +193,18 @@ func (e *external) Delete(ctx context.Context, mg resource.Managed) error {
 		f := false
 		current.AssignmentEnabled = &f
 		if _, _, err := e.service.Update(ctx, id, current); err != nil {
-			return errors.Wrap(err, errUpdateOplogStore)
+			return managed.ExternalDelete{}, errors.Wrap(err, errUpdateOplogStore)
 		}
 	}
 
 	_, err = e.service.Delete(ctx, id)
 	if isNotFound(err) {
-		return nil
+		return managed.ExternalDelete{}, nil
 	}
-	return errors.Wrap(err, errDeleteOplogStore)
+	return managed.ExternalDelete{}, errors.Wrap(err, errDeleteOplogStore)
 }
+
+func (e *external) Disconnect(_ context.Context) error { return nil }
 
 func (e *external) getAWSSecretKey(ctx context.Context, cr *v1alpha1.S3OplogStore) (string, error) {
 	ref := cr.Spec.ForProvider.AWSSecretKeySecretRef
@@ -239,8 +229,6 @@ func (e *external) getAWSSecretKey(ctx context.Context, cr *v1alpha1.S3OplogStor
 
 // --- helpers ---
 
-// lateInitOplogStore populates empty spec fields from the API response.
-// Returns true if any field was changed.
 func lateInitOplogStore(p *v1alpha1.S3OplogStoreParameters, o *opsmngr.S3Blockstore) bool {
 	changed := false
 	set := func(dst *string, src string) {
@@ -395,4 +383,3 @@ func isNotFound(err error) bool {
 	var e *opsmngr.ErrorResponse
 	return stderrors.As(err, &e) && e.Response != nil && e.Response.StatusCode == http.StatusNotFound
 }
-
