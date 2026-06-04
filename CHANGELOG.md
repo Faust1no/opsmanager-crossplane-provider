@@ -5,10 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
-### Added
-- CI workflow with golangci-lint and CHANGELOG enforcement.
+
+## [1.1.1] - 2026-06-04
+### Fixed
+- `S3Blockstore` and `S3OplogStore` labels can now be deleted via YAML. Labels are adopted
+  from the API exactly once (on first Observe) and the annotation
+  `opsmanager.crossplane.io/labels-adopted` is set; after that the spec YAML is the source
+  of truth and the API never overwrites a user-removed label.
 
 ## [1.1.0] - 2026-06-03
+### Added
+- CI workflow with golangci-lint and CHANGELOG enforcement.
 ### Fixed
 - `lateInitBlockstore` and `lateInitOplogStore` now populate `s3BucketEndpoint` and
   `s3AuthMethod` from the API response, preventing spurious Updates when adopting an
