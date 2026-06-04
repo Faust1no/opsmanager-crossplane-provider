@@ -121,7 +121,8 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// Adopt labels from the API exactly once. After the annotation is set,
 	// the spec YAML is authoritative and labels are never overwritten.
 	ann := cr.GetAnnotations()
-	if ann[annotationLabelsAdopted] != "true" {
+	labelsAdopted := ann[annotationLabelsAdopted] == "true"
+	if !labelsAdopted {
 		if cr.Spec.ForProvider.Labels == nil && len(observed.Labels) > 0 {
 			cr.Spec.ForProvider.Labels = observed.Labels
 		}
@@ -131,11 +132,12 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		ann[annotationLabelsAdopted] = "true"
 		cr.SetAnnotations(ann)
 		lateInitialized = true
+		labelsAdopted = true
 	}
 
 	return managed.ExternalObservation{
 		ResourceExists:          true,
-		ResourceUpToDate:        isUpToDate(cr.Spec.ForProvider, observed),
+		ResourceUpToDate:        isUpToDate(cr.Spec.ForProvider, observed, labelsAdopted),
 		ResourceLateInitialized: lateInitialized,
 	}, nil
 }
@@ -335,7 +337,7 @@ func toSDKBlockstore(p v1alpha1.S3BlockstoreParameters, awsSecretKey string) *op
 // Required fields are always compared. Optional fields are only compared when
 // explicitly set in the spec — unset means "not managed, don't touch".
 // AWS secret key is intentionally excluded — it cannot be read back from the API.
-func isUpToDate(p v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockstore) bool {
+func isUpToDate(p v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockstore, labelsAdopted bool) bool {
 	if p.S3BucketName != o.S3BucketName {
 		return false
 	}
@@ -348,7 +350,13 @@ func isUpToDate(p v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockstore) bool
 	if p.AWSAccessKey != "" && p.AWSAccessKey != o.AWSAccessKey {
 		return false
 	}
-	if p.Labels != nil && !stringSlicesEqual(p.Labels, o.Labels) {
+	// Once labels are adopted, treat nil spec labels as "user wants no labels"
+	// and always compare. Before adoption, nil means "not declared yet, skip".
+	if labelsAdopted {
+		if !stringSlicesEqual(p.Labels, o.Labels) {
+			return false
+		}
+	} else if p.Labels != nil && !stringSlicesEqual(p.Labels, o.Labels) {
 		return false
 	}
 	if p.AssignmentEnabled != nil && !boolPtrEqual(p.AssignmentEnabled, o.AssignmentEnabled) {
