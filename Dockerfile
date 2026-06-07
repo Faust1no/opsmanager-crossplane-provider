@@ -1,7 +1,7 @@
 # Stage 1 — build the static provider binary.
 # go mod vendor must be run before building this image so the local SDK
 # replace directive (../go-client-mongodb-ops-manager) is resolved into vendor/.
-FROM golang:1.21-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /workspace
 
