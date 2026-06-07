@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
 	"github.com/mongodb-forks/digest"
 	"github.com/pkg/errors"
 	"go.mongodb.org/ops-manager/opsmngr"

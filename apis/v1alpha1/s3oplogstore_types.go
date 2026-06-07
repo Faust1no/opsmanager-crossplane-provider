@@ -1,7 +1,8 @@
 package v1alpha1
 
 import (
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
+	xpv2 "github.com/crossplane/crossplane-runtime/v2/apis/common/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -119,14 +120,14 @@ type S3OplogStoreObservation struct {
 
 // S3OplogStoreSpec defines the desired state of an S3OplogStore.
 type S3OplogStoreSpec struct {
-	xpv1.ResourceSpec `json:",inline"`
-	ForProvider       S3OplogStoreParameters `json:"forProvider"`
+	xpv2.ManagedResourceSpec `json:",inline"`
+	ForProvider              S3OplogStoreParameters `json:"forProvider"`
 }
 
 // S3OplogStoreStatus defines the observed state of an S3OplogStore.
 type S3OplogStoreStatus struct {
-	xpv1.ConditionedStatus `json:",inline"`
-	AtProvider             S3OplogStoreObservation `json:"atProvider,omitempty"`
+	xpv1.ResourceStatus `json:",inline"`
+	AtProvider          S3OplogStoreObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -147,39 +148,6 @@ type S3OplogStore struct {
 
 	Spec   S3OplogStoreSpec   `json:"spec"`
 	Status S3OplogStoreStatus `json:"status,omitempty"`
-}
-
-func (mg *S3OplogStore) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
-	return mg.Status.GetCondition(ct)
-}
-func (mg *S3OplogStore) SetConditions(c ...xpv1.Condition) { mg.Status.SetConditions(c...) }
-func (mg *S3OplogStore) GetDeletionPolicy() xpv1.DeletionPolicy {
-	return mg.Spec.DeletionPolicy
-}
-func (mg *S3OplogStore) SetDeletionPolicy(r xpv1.DeletionPolicy) { mg.Spec.DeletionPolicy = r }
-func (mg *S3OplogStore) GetManagementPolicies() xpv1.ManagementPolicies {
-	return mg.Spec.ManagementPolicies
-}
-func (mg *S3OplogStore) SetManagementPolicies(r xpv1.ManagementPolicies) {
-	mg.Spec.ManagementPolicies = r
-}
-func (mg *S3OplogStore) GetProviderConfigReference() *xpv1.Reference {
-	return mg.Spec.ProviderConfigReference
-}
-func (mg *S3OplogStore) SetProviderConfigReference(r *xpv1.Reference) {
-	mg.Spec.ProviderConfigReference = r
-}
-func (mg *S3OplogStore) GetPublishConnectionDetailsTo() *xpv1.PublishConnectionDetailsTo {
-	return mg.Spec.PublishConnectionDetailsTo
-}
-func (mg *S3OplogStore) SetPublishConnectionDetailsTo(r *xpv1.PublishConnectionDetailsTo) {
-	mg.Spec.PublishConnectionDetailsTo = r
-}
-func (mg *S3OplogStore) GetWriteConnectionSecretToReference() *xpv1.SecretReference {
-	return mg.Spec.WriteConnectionSecretToReference
-}
-func (mg *S3OplogStore) SetWriteConnectionSecretToReference(r *xpv1.SecretReference) {
-	mg.Spec.WriteConnectionSecretToReference = r
 }
 
 // +kubebuilder:object:root=true

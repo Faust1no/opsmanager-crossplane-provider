@@ -1,7 +1,8 @@
 package v1alpha1
 
 import (
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
+	xpv2 "github.com/crossplane/crossplane-runtime/v2/apis/common/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -50,14 +51,14 @@ type OpsManagerProjectObservation struct {
 
 // OpsManagerProjectSpec defines the desired state of an OpsManagerProject.
 type OpsManagerProjectSpec struct {
-	xpv1.ResourceSpec `json:",inline"`
-	ForProvider       OpsManagerProjectParameters `json:"forProvider"`
+	xpv2.ManagedResourceSpec `json:",inline"`
+	ForProvider              OpsManagerProjectParameters `json:"forProvider"`
 }
 
 // OpsManagerProjectStatus defines the observed state of an OpsManagerProject.
 type OpsManagerProjectStatus struct {
-	xpv1.ConditionedStatus `json:",inline"`
-	AtProvider             OpsManagerProjectObservation `json:"atProvider,omitempty"`
+	xpv1.ResourceStatus `json:",inline"`
+	AtProvider          OpsManagerProjectObservation `json:"atProvider,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -77,68 +78,6 @@ type OpsManagerProject struct {
 
 	Spec   OpsManagerProjectSpec   `json:"spec"`
 	Status OpsManagerProjectStatus `json:"status,omitempty"`
-}
-
-// --- resource.Managed interface forwarding methods ---
-
-// GetCondition of this OpsManagerProject.
-func (mg *OpsManagerProject) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
-	return mg.Status.GetCondition(ct)
-}
-
-// SetConditions of this OpsManagerProject.
-func (mg *OpsManagerProject) SetConditions(c ...xpv1.Condition) {
-	mg.Status.SetConditions(c...)
-}
-
-// GetDeletionPolicy of this OpsManagerProject.
-func (mg *OpsManagerProject) GetDeletionPolicy() xpv1.DeletionPolicy {
-	return mg.Spec.DeletionPolicy
-}
-
-// SetDeletionPolicy of this OpsManagerProject.
-func (mg *OpsManagerProject) SetDeletionPolicy(r xpv1.DeletionPolicy) {
-	mg.Spec.DeletionPolicy = r
-}
-
-// GetManagementPolicies of this OpsManagerProject.
-func (mg *OpsManagerProject) GetManagementPolicies() xpv1.ManagementPolicies {
-	return mg.Spec.ManagementPolicies
-}
-
-// SetManagementPolicies of this OpsManagerProject.
-func (mg *OpsManagerProject) SetManagementPolicies(r xpv1.ManagementPolicies) {
-	mg.Spec.ManagementPolicies = r
-}
-
-// GetProviderConfigReference of this OpsManagerProject.
-func (mg *OpsManagerProject) GetProviderConfigReference() *xpv1.Reference {
-	return mg.Spec.ProviderConfigReference
-}
-
-// SetProviderConfigReference of this OpsManagerProject.
-func (mg *OpsManagerProject) SetProviderConfigReference(r *xpv1.Reference) {
-	mg.Spec.ProviderConfigReference = r
-}
-
-// GetPublishConnectionDetailsTo of this OpsManagerProject.
-func (mg *OpsManagerProject) GetPublishConnectionDetailsTo() *xpv1.PublishConnectionDetailsTo {
-	return mg.Spec.PublishConnectionDetailsTo
-}
-
-// SetPublishConnectionDetailsTo of this OpsManagerProject.
-func (mg *OpsManagerProject) SetPublishConnectionDetailsTo(r *xpv1.PublishConnectionDetailsTo) {
-	mg.Spec.PublishConnectionDetailsTo = r
-}
-
-// GetWriteConnectionSecretToReference of this OpsManagerProject.
-func (mg *OpsManagerProject) GetWriteConnectionSecretToReference() *xpv1.SecretReference {
-	return mg.Spec.WriteConnectionSecretToReference
-}
-
-// SetWriteConnectionSecretToReference of this OpsManagerProject.
-func (mg *OpsManagerProject) SetWriteConnectionSecretToReference(r *xpv1.SecretReference) {
-	mg.Spec.WriteConnectionSecretToReference = r
 }
 
 // +kubebuilder:object:root=true

@@ -7,12 +7,12 @@ import (
 	"net/url"
 	"strings"
 
-	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	"github.com/crossplane/crossplane-runtime/pkg/controller"
-	"github.com/crossplane/crossplane-runtime/pkg/event"
-	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	"github.com/pkg/errors"
 	"go.mongodb.org/ops-manager/opsmngr"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,13 +25,16 @@ import (
 )
 
 const (
-	errNotBackupDaemon   = "managed resource is not a BackupDaemon"
 	errGetProviderConfig = "cannot get ProviderConfig"
 	errCreateClient      = "cannot create Ops Manager client"
 	errTrackUsage        = "cannot track ProviderConfig usage"
 	errListDaemons       = "cannot list backup daemons from Ops Manager"
 	errUpdateDaemon      = "cannot update backup daemon in Ops Manager"
 	errDaemonNotFound    = "backup daemon not found in Ops Manager; ensure the backup agent is running and has registered"
+
+	// annotationLabelsAdopted is set after the first Observe so that labels are
+	// adopted from the API exactly once. After that, the spec YAML is authoritative.
+	annotationLabelsAdopted = "opsmanager.crossplane.io/labels-adopted"
 )
 
 // Setup registers the BackupDaemon controller with the manager.
@@ -40,7 +43,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 
 	r := managed.NewReconciler(mgr,
 		resource.ManagedKind(v1alpha1.BackupDaemonGroupVersionKind),
-		managed.WithExternalConnecter(&connector{
+		managed.WithTypedExternalConnector[*v1alpha1.BackupDaemon](&connector{
 			kube:  mgr.GetClient(),
 			usage: resource.NewProviderConfigUsageTracker(mgr.GetClient(), &v1beta1.ProviderConfigUsage{}),
 		}),
@@ -60,13 +63,8 @@ type connector struct {
 	usage *resource.ProviderConfigUsageTracker
 }
 
-func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
-	cr, ok := mg.(*v1alpha1.BackupDaemon)
-	if !ok {
-		return nil, errors.New(errNotBackupDaemon)
-	}
-
-	if err := c.usage.Track(ctx, mg); err != nil {
+func (c *connector) Connect(ctx context.Context, cr *v1alpha1.BackupDaemon) (managed.TypedExternalClient[*v1alpha1.BackupDaemon], error) {
+	if err := c.usage.Track(ctx, cr); err != nil {
 		return nil, errors.Wrap(err, errTrackUsage)
 	}
 
@@ -95,9 +93,7 @@ type external struct {
 // Observe lists all registered daemons and finds the one matching spec.machine by hostname.
 // ResourceExists=false if the daemon hasn't registered with Ops Manager yet, or if the CR
 // is being deleted (daemon config is intentionally left in Ops Manager on CR delete).
-func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	cr := mg.(*v1alpha1.BackupDaemon)
-
+func (e *external) Observe(ctx context.Context, cr *v1alpha1.BackupDaemon) (managed.ExternalObservation, error) {
 	if meta.WasDeleted(cr) {
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
@@ -107,7 +103,6 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{}, errors.Wrap(err, errListDaemons)
 	}
 	if observed == nil {
-		// Daemon hasn't registered yet — keep retrying via Create's error.
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
@@ -115,20 +110,35 @@ func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	meta.SetExternalName(cr, daemonAPIID(observed))
 	cr.SetConditions(xpv1.Available())
 
-	lateInitDaemon(&cr.Spec.ForProvider, observed)
+	lateInitialized := lateInitDaemon(&cr.Spec.ForProvider, observed)
+
+	// Adopt labels from the API exactly once. After the annotation is set,
+	// the spec YAML is authoritative and labels are never overwritten.
+	ann := cr.GetAnnotations()
+	labelsAdopted := ann[annotationLabelsAdopted] == "true"
+	if !labelsAdopted {
+		if cr.Spec.ForProvider.Labels == nil && len(observed.Labels) > 0 {
+			cr.Spec.ForProvider.Labels = observed.Labels
+		}
+		if ann == nil {
+			ann = make(map[string]string)
+		}
+		ann[annotationLabelsAdopted] = "true"
+		cr.SetAnnotations(ann)
+		lateInitialized = true
+		labelsAdopted = true
+	}
 
 	return managed.ExternalObservation{
-		ResourceExists:   true,
-		ResourceUpToDate: isUpToDate(cr.Spec.ForProvider, observed),
+		ResourceExists:          true,
+		ResourceUpToDate:        isUpToDate(cr.Spec.ForProvider, observed, labelsAdopted),
+		ResourceLateInitialized: lateInitialized,
 	}, nil
 }
 
-// Create is called when Observe did not find the daemon. Check once more before
-// giving up — if it exists, adopt it and populate the spec via late init.
-// If it genuinely isn't registered yet, return an error to requeue and retry.
-func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	cr := mg.(*v1alpha1.BackupDaemon)
-
+// Create is called when Observe did not find the daemon. If it still isn't
+// registered, return an error to requeue and retry.
+func (e *external) Create(ctx context.Context, cr *v1alpha1.BackupDaemon) (managed.ExternalCreation, error) {
 	existing, err := e.getDaemon(ctx, cr.Spec.ForProvider)
 	if err != nil {
 		return managed.ExternalCreation{}, errors.Wrap(err, errListDaemons)
@@ -145,9 +155,7 @@ func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 
 // Update fetches the current daemon state and applies the desired parameters,
 // preserving any fields not managed by this CR.
-func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	cr := mg.(*v1alpha1.BackupDaemon)
-
+func (e *external) Update(ctx context.Context, cr *v1alpha1.BackupDaemon) (managed.ExternalUpdate, error) {
 	current, err := e.getDaemon(ctx, cr.Spec.ForProvider)
 	if err != nil {
 		return managed.ExternalUpdate{}, errors.Wrap(err, errListDaemons)
@@ -166,17 +174,15 @@ func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 }
 
 // Delete removes the CR but does NOT delete the daemon from Ops Manager.
-func (e *external) Delete(_ context.Context, _ resource.Managed) error {
-	return nil
+func (e *external) Delete(_ context.Context, _ *v1alpha1.BackupDaemon) (managed.ExternalDelete, error) {
+	return managed.ExternalDelete{}, nil
 }
+
+func (e *external) Disconnect(_ context.Context) error { return nil }
 
 // --- helpers ---
 
-// getDaemon looks up the daemon in Ops Manager.
-// If headRootDirectory is set in the spec, it uses Get directly with the
-// composite ID (hostname/urlencoded(headDir)) — the reliable adoption path.
-// Otherwise it falls back to listing all daemons and matching by hostname,
-// also handling the case where d.Machine is nil in the API response.
+// getDaemon looks up the daemon in Ops Manager by machine hostname.
 func (e *external) getDaemon(ctx context.Context, p v1alpha1.BackupDaemonParameters) (*opsmngr.Daemon, error) {
 	if p.HeadRootDirectory != "" {
 		id := p.Machine + "/" + url.PathEscape(p.HeadRootDirectory)
@@ -195,8 +201,6 @@ func (e *external) getDaemon(ctx context.Context, p v1alpha1.BackupDaemonParamet
 		if d.Machine != nil && d.Machine.Machine == p.Machine {
 			return d, nil
 		}
-		// d.Machine is nil for some Ops Manager versions; fall back to the
-		// composite ID which always starts with the hostname.
 		if d.Machine == nil && strings.HasPrefix(d.ID, p.Machine+"/") {
 			return d, nil
 		}
@@ -204,8 +208,7 @@ func (e *external) getDaemon(ctx context.Context, p v1alpha1.BackupDaemonParamet
 	return nil, nil
 }
 
-// daemonAPIID constructs the URL path segment used by the Ops Manager API:
-// "hostname/%2FheadDir%2F" — the head directory is URL-path-encoded.
+// daemonAPIID constructs the URL path segment used by the Ops Manager API.
 func daemonAPIID(d *opsmngr.Daemon) string {
 	if d.Machine == nil {
 		return d.ID
@@ -213,51 +216,60 @@ func daemonAPIID(d *opsmngr.Daemon) string {
 	return d.Machine.Machine + "/" + url.PathEscape(d.Machine.HeadRootDirectory)
 }
 
-// lateInitDaemon populates empty optional spec fields from the API response.
-func lateInitDaemon(p *v1alpha1.BackupDaemonParameters, d *opsmngr.Daemon) {
-	if p.Labels == nil {
-		p.Labels = d.Labels
-	}
+func lateInitDaemon(p *v1alpha1.BackupDaemonParameters, d *opsmngr.Daemon) bool {
+	changed := false
+	// Labels are handled by the annotation-based adoption in Observe; skip here.
 	if p.AssignmentEnabled == nil {
 		p.AssignmentEnabled = d.AssignmentEnabled
+		changed = true
 	}
-	if p.URI == "" {
+	if p.URI == "" && d.URI != "" {
 		p.URI = d.URI
+		changed = true
 	}
-	if p.WriteConcern == "" {
+	if p.WriteConcern == "" && d.WriteConcern != "" {
 		p.WriteConcern = d.WriteConcern
+		changed = true
 	}
 	if p.SSL == nil {
 		p.SSL = d.SSL
+		changed = true
 	}
 	if p.EncryptedCredentials == nil {
 		p.EncryptedCredentials = d.EncryptedCredentials
+		changed = true
 	}
 	if p.BackupJobsEnabled == nil {
 		p.BackupJobsEnabled = boolPtr(d.BackupJobsEnabled)
+		changed = true
 	}
 	if p.GarbageCollectionEnabled == nil {
 		p.GarbageCollectionEnabled = boolPtr(d.GarbageCollectionEnabled)
+		changed = true
 	}
 	if p.ResourceUsageEnabled == nil {
 		p.ResourceUsageEnabled = boolPtr(d.ResourceUsageEnabled)
+		changed = true
 	}
 	if p.RestoreQueryableJobsEnabled == nil {
 		p.RestoreQueryableJobsEnabled = boolPtr(d.RestoreQueryableJobsEnabled)
+		changed = true
 	}
-	if p.HeadDiskType == "" {
+	if p.HeadDiskType == "" && d.HeadDiskType != "" {
 		p.HeadDiskType = d.HeadDiskType
+		changed = true
 	}
-	if p.NumWorkers == 0 {
+	if p.NumWorkers == 0 && d.NumWorkers != 0 {
 		p.NumWorkers = d.NumWorkers
+		changed = true
 	}
-	if p.HeadRootDirectory == "" && d.Machine != nil {
+	if p.HeadRootDirectory == "" && d.Machine != nil && d.Machine.HeadRootDirectory != "" {
 		p.HeadRootDirectory = d.Machine.HeadRootDirectory
+		changed = true
 	}
+	return changed
 }
 
-// applyParameters merges desired spec fields onto the current daemon,
-// leaving any fields not specified in the CR unchanged.
 func applyParameters(p v1alpha1.BackupDaemonParameters, d *opsmngr.Daemon) {
 	if p.Labels != nil {
 		d.Labels = p.Labels
@@ -303,9 +315,12 @@ func applyParameters(p v1alpha1.BackupDaemonParameters, d *opsmngr.Daemon) {
 	}
 }
 
-// isUpToDate checks whether the daemon's current state matches the desired spec.
-func isUpToDate(p v1alpha1.BackupDaemonParameters, d *opsmngr.Daemon) bool {
-	if p.Labels != nil && !stringSlicesEqual(p.Labels, d.Labels) {
+func isUpToDate(p v1alpha1.BackupDaemonParameters, d *opsmngr.Daemon, labelsAdopted bool) bool {
+	if labelsAdopted {
+		if !stringSlicesEqual(p.Labels, d.Labels) {
+			return false
+		}
+	} else if p.Labels != nil && !stringSlicesEqual(p.Labels, d.Labels) {
 		return false
 	}
 	if p.AssignmentEnabled != nil && !boolPtrEqual(p.AssignmentEnabled, d.AssignmentEnabled) {
@@ -357,4 +372,3 @@ func boolPtrEqual(a *bool, b *bool) bool {
 	}
 	return *a == *b
 }
-
