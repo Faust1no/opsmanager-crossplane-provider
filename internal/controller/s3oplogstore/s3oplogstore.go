@@ -160,7 +160,14 @@ func (e *external) Update(ctx context.Context, cr *v1alpha1.S3OplogStore) (manag
 	}
 
 	bs := toSDKStore(cr.Spec.ForProvider, awsSecretKey)
-	if _, _, err := e.service.Update(ctx, cr.Spec.ForProvider.ID, bs); err != nil {
+	// Ops Manager re-runs S3 bucket validation on every oplog-store update.
+	// The first probe right after a config change occasionally hits a transient
+	// 403 from S3, which OM surfaces as 409 BACKUP-S3-VALIDATION_FAILED.
+	// A short in-line retry avoids waiting a full --poll-interval for recovery.
+	if err := clients.RetryOnS3Validation(ctx, 3, 5*time.Second, func() error {
+		_, _, updErr := e.service.Update(ctx, cr.Spec.ForProvider.ID, bs)
+		return updErr
+	}); err != nil {
 		return managed.ExternalUpdate{}, errors.Wrap(err, errUpdateOplogStore)
 	}
 
@@ -182,7 +189,10 @@ func (e *external) Delete(ctx context.Context, cr *v1alpha1.S3OplogStore) (manag
 	if current.AssignmentEnabled != nil && *current.AssignmentEnabled {
 		f := false
 		current.AssignmentEnabled = &f
-		if _, _, err := e.service.Update(ctx, id, current); err != nil {
+		if err := clients.RetryOnS3Validation(ctx, 3, 5*time.Second, func() error {
+			_, _, updErr := e.service.Update(ctx, id, current)
+			return updErr
+		}); err != nil {
 			return managed.ExternalDelete{}, errors.Wrap(err, errUpdateOplogStore)
 		}
 	}

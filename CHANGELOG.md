@@ -35,6 +35,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `isUpToDate` now always compares labels once the `opsmanager.crossplane.io/labels-adopted`
   annotation is set, treating a nil spec as "user wants no labels" and triggering an Update
   to clear them in the API.
+- `S3Blockstore` and `S3OplogStore` Update (and the assignment-flip Update inside Delete)
+  now retry up to 3× with a 5s backoff on Ops Manager 409 `BACKUP-S3-VALIDATION_FAILED`.
+  The first S3 probe after a config change can hit a transient 403 from S3/MinIO; the
+  in-line retry recovers without waiting a full `--poll-interval`. Implemented via
+  `clients.RetryOnS3Validation`. Other errors fall through immediately.
 
 ## [1.1.1] - 2026-06-04
 ### Fixed
