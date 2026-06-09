@@ -4,6 +4,7 @@ metadata:
   name: ops-manager-daemon
 spec:
   providerConfigRef:
+    kind: ClusterProviderConfig
     name: default
   forProvider:
     # This is the host:port the backup daemon registers with in Ops Manager.

@@ -10,6 +10,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	"github.com/pkg/errors"
@@ -20,13 +21,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane-contrib/provider-opsmanager/apis/v1alpha1"
-	"github.com/crossplane-contrib/provider-opsmanager/apis/v1beta1"
 	"github.com/crossplane-contrib/provider-opsmanager/internal/clients"
 )
 
 const (
-	errGetProviderConfig = "cannot get ProviderConfig"
-	errCreateClient      = "cannot create Ops Manager client"
+	errGetProviderConfig = "cannot resolve ProviderConfig"
 	errTrackUsage        = "cannot track ProviderConfig usage"
 	errGetBlockstore     = "cannot get S3 blockstore from Ops Manager"
 	errCreateBlockstore  = "cannot create S3 blockstore in Ops Manager"
@@ -47,9 +46,10 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		resource.ManagedKind(v1alpha1.S3BlockstoreGroupVersionKind),
 		managed.WithTypedExternalConnector[*v1alpha1.S3Blockstore](&connector{
 			kube:  mgr.GetClient(),
-			usage: resource.NewProviderConfigUsageTracker(mgr.GetClient(), &v1beta1.ProviderConfigUsage{}),
+			usage: clients.NewUsageTracker(mgr.GetClient()),
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
+		managed.WithPollInterval(o.PollInterval),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 		managed.WithTimeout(5*time.Minute),
 	)
@@ -57,13 +57,14 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
+		WithEventFilter(resource.DesiredStateChanged()).
 		For(&v1alpha1.S3Blockstore{}).
-		Complete(r)
+		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
 type connector struct {
 	kube  client.Client
-	usage *resource.ProviderConfigUsageTracker
+	usage *clients.UsageTracker
 }
 
 func (c *connector) Connect(ctx context.Context, cr *v1alpha1.S3Blockstore) (managed.TypedExternalClient[*v1alpha1.S3Blockstore], error) {
@@ -71,21 +72,10 @@ func (c *connector) Connect(ctx context.Context, cr *v1alpha1.S3Blockstore) (man
 		return nil, errors.Wrap(err, errTrackUsage)
 	}
 
-	pc := &v1beta1.ProviderConfig{}
-	if err := c.kube.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
+	opsClient, _, err := clients.Resolve(ctx, c.kube, cr.GetProviderConfigReference(), cr.GetNamespace())
+	if err != nil {
 		return nil, errors.Wrap(err, errGetProviderConfig)
 	}
-
-	creds, err := clients.GetCredentials(ctx, c.kube, pc)
-	if err != nil {
-		return nil, err
-	}
-
-	opsClient, err := clients.NewClient(pc.Spec.BaseURL, creds)
-	if err != nil {
-		return nil, errors.Wrap(err, errCreateClient)
-	}
-
 	return &external{service: opsClient.S3BlockstoreConfig, kube: c.kube}, nil
 }
 
@@ -231,8 +221,6 @@ func (e *external) getAWSSecretKey(ctx context.Context, cr *v1alpha1.S3Blockstor
 
 // --- helpers ---
 
-// lateInitBlockstore populates empty spec fields from the API response.
-// Returns true if any field was changed.
 func lateInitBlockstore(p *v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockstore) bool {
 	changed := false
 	set := func(dst *string, src string) {
@@ -280,10 +268,8 @@ func lateInitBlockstore(p *v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockst
 	return changed
 }
 
-// defaultFalse returns a pointer to false — used to satisfy required *bool API fields.
 func defaultFalse() *bool { f := false; return &f }
 
-// toSDKBlockstore maps the CRD parameters to the SDK struct.
 func toSDKBlockstore(p v1alpha1.S3BlockstoreParameters, awsSecretKey string) *opsmngr.S3Blockstore {
 	maxConn := p.S3MaxConnections
 	if maxConn == 0 {
@@ -323,7 +309,6 @@ func toSDKBlockstore(p v1alpha1.S3BlockstoreParameters, awsSecretKey string) *op
 	}
 }
 
-// isUpToDate compares the desired spec against the observed API state.
 func isUpToDate(p v1alpha1.S3BlockstoreParameters, o *opsmngr.S3Blockstore, labelsAdopted bool) bool {
 	if p.S3BucketName != o.S3BucketName {
 		return false

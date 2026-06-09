@@ -15,13 +15,21 @@ API. This repo _is_ a provider — it targets the MongoDB Ops Manager REST API.
 When installed, it runs as a pod inside the cluster and watches for CRs.
 
 **ProviderConfig** (`apis/v1beta1/providerconfig_types.go`)
-Holds the connection details shared by all managed resources: the Ops Manager
-base URL and a reference to a Kubernetes Secret containing the API key pair.
-Multiple managed resources can reference one ProviderConfig.
+Holds the connection details shared by managed resources: the Ops Manager base
+URL and a reference to a Kubernetes Secret containing the API key pair. The
+provider supports two variants:
+
+- `ClusterProviderConfig` — cluster-scoped, referenced by any managed resource
+  via `providerConfigRef: { kind: ClusterProviderConfig, name: ... }`. Use this
+  for the common case of one Ops Manager shared across the cluster.
+- `ProviderConfig` — namespace-scoped, referenced only by managed resources in
+  the same namespace via `providerConfigRef: { kind: ProviderConfig, name: ... }`.
+  Use this when different namespaces target different Ops Manager instances.
+  Cluster-scoped managed resources (`BackupDaemon`) cannot reference this kind.
 
 ```yaml
 apiVersion: opsmanager.crossplane.io/v1beta1
-kind: ProviderConfig
+kind: ClusterProviderConfig
 metadata:
   name: default
 spec:
@@ -199,7 +207,7 @@ kubectl get provider provider-opsmanager -w
 # INSTALLED=True, HEALTHY=True
 ```
 
-Then follow [TESTING.md](TESTING.md) to configure a `ProviderConfig` and apply managed resources.
+Then follow [TESTING.md](TESTING.md) to configure a `ClusterProviderConfig` (or namespace-scoped `ProviderConfig`) and apply managed resources.
 
 ## Development
 

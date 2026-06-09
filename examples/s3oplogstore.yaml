@@ -5,6 +5,7 @@ metadata:
   namespace: crossplane-system
 spec:
   providerConfigRef:
+    kind: ClusterProviderConfig
     name: default
   forProvider:
     # ID is the store identifier in Ops Manager (Admin → Backup → Oplog Stores).
