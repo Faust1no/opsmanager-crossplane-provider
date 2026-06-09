@@ -20,3 +20,49 @@ var SchemeGroupVersion = schema.GroupVersion{Group: Group, Version: Version}
 
 // SchemeBuilder is used to add functions to this group's scheme.
 var SchemeBuilder = &scheme.Builder{GroupVersion: SchemeGroupVersion}
+
+// ClusterProviderConfig type metadata.
+var (
+	ClusterProviderConfigGroupKind = schema.GroupKind{
+		Group: Group,
+		Kind:  "ClusterProviderConfig",
+	}
+	ClusterProviderConfigGroupVersionKind = schema.GroupVersionKind{
+		Group:   Group,
+		Version: Version,
+		Kind:    "ClusterProviderConfig",
+	}
+	ClusterProviderConfigUsageGroupVersionKind = schema.GroupVersionKind{
+		Group:   Group,
+		Version: Version,
+		Kind:    "ClusterProviderConfigUsage",
+	}
+	ClusterProviderConfigUsageListGroupVersionKind = schema.GroupVersionKind{
+		Group:   Group,
+		Version: Version,
+		Kind:    "ClusterProviderConfigUsageList",
+	}
+)
+
+// ProviderConfig type metadata.
+var (
+	ProviderConfigGroupKind = schema.GroupKind{
+		Group: Group,
+		Kind:  "ProviderConfig",
+	}
+	ProviderConfigGroupVersionKind = schema.GroupVersionKind{
+		Group:   Group,
+		Version: Version,
+		Kind:    "ProviderConfig",
+	}
+	ProviderConfigUsageGroupVersionKind = schema.GroupVersionKind{
+		Group:   Group,
+		Version: Version,
+		Kind:    "ProviderConfigUsage",
+	}
+	ProviderConfigUsageListGroupVersionKind = schema.GroupVersionKind{
+		Group:   Group,
+		Version: Version,
+		Kind:    "ProviderConfigUsageList",
+	}
+)

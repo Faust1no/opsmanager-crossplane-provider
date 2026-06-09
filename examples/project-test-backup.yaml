@@ -4,6 +4,7 @@ metadata:
   name: test-backup
 spec:
   providerConfigRef:
+    kind: ClusterProviderConfig
     name: default
   forProvider:
     name: "test-backup"

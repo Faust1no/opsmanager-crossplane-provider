@@ -10,6 +10,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	"github.com/pkg/errors"
@@ -20,13 +21,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane-contrib/provider-opsmanager/apis/v1alpha1"
-	"github.com/crossplane-contrib/provider-opsmanager/apis/v1beta1"
 	"github.com/crossplane-contrib/provider-opsmanager/internal/clients"
 )
 
 const (
-	errGetProviderConfig = "cannot get ProviderConfig"
-	errCreateClient      = "cannot create Ops Manager client"
+	errGetProviderConfig = "cannot resolve ProviderConfig"
 	errTrackUsage        = "cannot track ProviderConfig usage"
 	errGetOplogStore     = "cannot get S3 oplog store from Ops Manager"
 	errCreateOplogStore  = "cannot create S3 oplog store in Ops Manager"
@@ -47,9 +46,10 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		resource.ManagedKind(v1alpha1.S3OplogStoreGroupVersionKind),
 		managed.WithTypedExternalConnector[*v1alpha1.S3OplogStore](&connector{
 			kube:  mgr.GetClient(),
-			usage: resource.NewProviderConfigUsageTracker(mgr.GetClient(), &v1beta1.ProviderConfigUsage{}),
+			usage: clients.NewUsageTracker(mgr.GetClient()),
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
+		managed.WithPollInterval(o.PollInterval),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 		managed.WithTimeout(5*time.Minute),
 	)
@@ -57,13 +57,14 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
+		WithEventFilter(resource.DesiredStateChanged()).
 		For(&v1alpha1.S3OplogStore{}).
-		Complete(r)
+		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
 type connector struct {
 	kube  client.Client
-	usage *resource.ProviderConfigUsageTracker
+	usage *clients.UsageTracker
 }
 
 func (c *connector) Connect(ctx context.Context, cr *v1alpha1.S3OplogStore) (managed.TypedExternalClient[*v1alpha1.S3OplogStore], error) {
@@ -71,21 +72,10 @@ func (c *connector) Connect(ctx context.Context, cr *v1alpha1.S3OplogStore) (man
 		return nil, errors.Wrap(err, errTrackUsage)
 	}
 
-	pc := &v1beta1.ProviderConfig{}
-	if err := c.kube.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
+	opsClient, _, err := clients.Resolve(ctx, c.kube, cr.GetProviderConfigReference(), cr.GetNamespace())
+	if err != nil {
 		return nil, errors.Wrap(err, errGetProviderConfig)
 	}
-
-	creds, err := clients.GetCredentials(ctx, c.kube, pc)
-	if err != nil {
-		return nil, err
-	}
-
-	opsClient, err := clients.NewClient(pc.Spec.BaseURL, creds)
-	if err != nil {
-		return nil, errors.Wrap(err, errCreateClient)
-	}
-
 	return &external{service: opsClient.S3OplogStoreConfig, kube: c.kube}, nil
 }
 
@@ -170,7 +160,14 @@ func (e *external) Update(ctx context.Context, cr *v1alpha1.S3OplogStore) (manag
 	}
 
 	bs := toSDKStore(cr.Spec.ForProvider, awsSecretKey)
-	if _, _, err := e.service.Update(ctx, cr.Spec.ForProvider.ID, bs); err != nil {
+	// Ops Manager re-runs S3 bucket validation on every oplog-store update.
+	// The first probe right after a config change occasionally hits a transient
+	// 403 from S3, which OM surfaces as 409 BACKUP-S3-VALIDATION_FAILED.
+	// A short in-line retry avoids waiting a full --poll-interval for recovery.
+	if err := clients.RetryOnS3Validation(ctx, 3, 5*time.Second, func() error {
+		_, _, updErr := e.service.Update(ctx, cr.Spec.ForProvider.ID, bs)
+		return updErr
+	}); err != nil {
 		return managed.ExternalUpdate{}, errors.Wrap(err, errUpdateOplogStore)
 	}
 
@@ -192,7 +189,10 @@ func (e *external) Delete(ctx context.Context, cr *v1alpha1.S3OplogStore) (manag
 	if current.AssignmentEnabled != nil && *current.AssignmentEnabled {
 		f := false
 		current.AssignmentEnabled = &f
-		if _, _, err := e.service.Update(ctx, id, current); err != nil {
+		if err := clients.RetryOnS3Validation(ctx, 3, 5*time.Second, func() error {
+			_, _, updErr := e.service.Update(ctx, id, current)
+			return updErr
+		}); err != nil {
 			return managed.ExternalDelete{}, errors.Wrap(err, errUpdateOplogStore)
 		}
 	}
@@ -330,8 +330,6 @@ func isUpToDate(p v1alpha1.S3OplogStoreParameters, o *opsmngr.S3Blockstore, labe
 	if p.AWSAccessKey != "" && p.AWSAccessKey != o.AWSAccessKey {
 		return false
 	}
-	// Once labels are adopted, treat nil spec labels as "user wants no labels"
-	// and always compare. Before adoption, nil means "not declared yet, skip".
 	if labelsAdopted {
 		if !stringSlicesEqual(p.Labels, o.Labels) {
 			return false

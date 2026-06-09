@@ -4,17 +4,17 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: providerconfigs.opsmanager.crossplane.io
+  name: clusterproviderconfigs.opsmanager.crossplane.io
 spec:
   group: opsmanager.crossplane.io
   names:
     categories:
     - crossplane
-    kind: ProviderConfig
-    listKind: ProviderConfigList
-    plural: providerconfigs
-    singular: providerconfig
-  scope: Namespaced
+    kind: ClusterProviderConfig
+    listKind: ClusterProviderConfigList
+    plural: clusterproviderconfigs
+    singular: clusterproviderconfig
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .metadata.creationTimestamp
@@ -26,8 +26,8 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: ProviderConfig configures a MongoDB Ops Manager provider for
-          a single namespace.
+        description: ClusterProviderConfig configures a MongoDB Ops Manager provider
+          for the whole cluster.
         properties:
           apiVersion:
             description: |-
@@ -113,7 +113,8 @@ spec:
             - credentials
             type: object
           status:
-            description: ProviderConfigStatus represents the observed state of a ProviderConfig.
+            description: ClusterProviderConfigStatus represents the observed state
+              of a ClusterProviderConfig.
             properties:
               conditions:
                 description: Conditions of the resource.

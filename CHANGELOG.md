@@ -5,11 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
+### Added
+- Namespace-scoped `ProviderConfig` (and `ProviderConfigUsage`) alongside the existing
+  cluster-scoped `ClusterProviderConfig`. Namespaced managed resources can now pick a
+  per-namespace Ops Manager via `providerConfigRef.kind: ProviderConfig`.
+- Unified `clients.Resolve` and `clients.UsageTracker` helpers in `internal/clients`
+  so each managed resource controller's `Connect` is two lines (`Track` + `Resolve`)
+  instead of a per-kind switch.
+- Provider `Makefile` at the repo root with developer inner-loop targets:
+  `generate`, `build`, `image`, `xpkg`, `load`, `install`, `redeploy`, `logs`,
+  `status`, `lint`, `test`, `vendor`, `clean`.
+- Optional log rotation: `--log-file`, `--log-file-max-size`, `--log-file-max-backups`,
+  `--log-file-max-age` CLI flags (off by default). Implemented via `lumberjack`.
+- `DEVELOPMENT.md` section 2 documenting the provider Makefile and the dev loop.
+
+### Changed
+- `cmd/provider/main.go` rewritten with `kingpin` flags (`--debug`, `--sync-interval`,
+  `--poll-interval`, `--leader-election`, `--max-reconcile-rate`). Startup failures
+  now log at Info level instead of Debug (previous Debug-then-exit was silent at default
+  verbosity).
+- All managed-resource controllers (`project`, `s3blockstore`, `s3oplogstore`,
+  `backupdaemon`) now use `clients.NewUsageTracker` and `clients.Resolve`,
+  removing the inlined switch-on-kind boilerplate from each `Connect`.
+- `internal/controller/config/config.go` now wires both `ClusterProviderConfig` and
+  `ProviderConfig` reconcilers via `providerconfig.NewReconciler`.
+
 ### Fixed
 - `S3Blockstore` and `S3OplogStore` labels can now be fully deleted via YAML.
   `isUpToDate` now always compares labels once the `opsmanager.crossplane.io/labels-adopted`
   annotation is set, treating a nil spec as "user wants no labels" and triggering an Update
   to clear them in the API.
+- `S3Blockstore` and `S3OplogStore` Update (and the assignment-flip Update inside Delete)
+  now retry up to 3× with a 5s backoff on Ops Manager 409 `BACKUP-S3-VALIDATION_FAILED`.
+  The first S3 probe after a config change can hit a transient 403 from S3/MinIO; the
+  in-line retry recovers without waiting a full `--poll-interval`. Implemented via
+  `clients.RetryOnS3Validation`. Other errors fall through immediately.
 
 ## [1.1.1] - 2026-06-04
 ### Fixed

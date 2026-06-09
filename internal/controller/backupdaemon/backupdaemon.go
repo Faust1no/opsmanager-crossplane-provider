@@ -11,22 +11,20 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	"github.com/pkg/errors"
 	"go.mongodb.org/ops-manager/opsmngr"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane-contrib/provider-opsmanager/apis/v1alpha1"
-	"github.com/crossplane-contrib/provider-opsmanager/apis/v1beta1"
 	"github.com/crossplane-contrib/provider-opsmanager/internal/clients"
 )
 
 const (
-	errGetProviderConfig = "cannot get ProviderConfig"
-	errCreateClient      = "cannot create Ops Manager client"
+	errGetProviderConfig = "cannot resolve ProviderConfig"
 	errTrackUsage        = "cannot track ProviderConfig usage"
 	errListDaemons       = "cannot list backup daemons from Ops Manager"
 	errUpdateDaemon      = "cannot update backup daemon in Ops Manager"
@@ -45,22 +43,24 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		resource.ManagedKind(v1alpha1.BackupDaemonGroupVersionKind),
 		managed.WithTypedExternalConnector[*v1alpha1.BackupDaemon](&connector{
 			kube:  mgr.GetClient(),
-			usage: resource.NewProviderConfigUsageTracker(mgr.GetClient(), &v1beta1.ProviderConfigUsage{}),
+			usage: clients.NewUsageTracker(mgr.GetClient()),
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
+		managed.WithPollInterval(o.PollInterval),
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
+		WithEventFilter(resource.DesiredStateChanged()).
 		For(&v1alpha1.BackupDaemon{}).
-		Complete(r)
+		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }
 
 type connector struct {
 	kube  client.Client
-	usage *resource.ProviderConfigUsageTracker
+	usage *clients.UsageTracker
 }
 
 func (c *connector) Connect(ctx context.Context, cr *v1alpha1.BackupDaemon) (managed.TypedExternalClient[*v1alpha1.BackupDaemon], error) {
@@ -68,21 +68,10 @@ func (c *connector) Connect(ctx context.Context, cr *v1alpha1.BackupDaemon) (man
 		return nil, errors.Wrap(err, errTrackUsage)
 	}
 
-	pc := &v1beta1.ProviderConfig{}
-	if err := c.kube.Get(ctx, types.NamespacedName{Name: cr.GetProviderConfigReference().Name}, pc); err != nil {
+	opsClient, _, err := clients.Resolve(ctx, c.kube, cr.GetProviderConfigReference(), cr.GetNamespace())
+	if err != nil {
 		return nil, errors.Wrap(err, errGetProviderConfig)
 	}
-
-	creds, err := clients.GetCredentials(ctx, c.kube, pc)
-	if err != nil {
-		return nil, err
-	}
-
-	opsClient, err := clients.NewClient(pc.Spec.BaseURL, creds)
-	if err != nil {
-		return nil, errors.Wrap(err, errCreateClient)
-	}
-
 	return &external{service: opsClient.DaemonConfig}, nil
 }
 

@@ -30,9 +30,19 @@ sudo mv crossplane /usr/local/bin/
 
 ---
 
+> **Two Makefiles, two jobs.** The repo uses two separate Makefiles that target
+> different concerns. Keep them straight as you read on:
+>
+> | Makefile | Location | What it does |
+> |---|---|---|
+> | **Lab Makefile** | `/home/crossplane-faust/Makefile` (outside this repo) | Bootstraps the surrounding lab — kind cluster, Crossplane install, Ops Manager, MinIO, LDAP, etc. Run once per laptop. |
+> | **Provider Makefile** | `Makefile` (repo root) | Builds / packages / installs *this* provider into the lab cluster. Run on every code change. |
+>
+> Sections 1 covers the lab Makefile. Section 2 covers the provider Makefile and the dev inner loop.
+
 ## 1 — Deploy the Lab
 
-The `Makefile` at the root of this repository bootstraps a complete local stack:
+The lab `Makefile` at `/home/crossplane-faust/Makefile` bootstraps a complete local stack:
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
@@ -148,95 +158,121 @@ MCK_TEST_RS_VERSION  ?= 6.0.5
 
 ---
 
-## 2 — Run the Provider Locally
+## 2 — Provider Makefile
 
-See [TESTING.md](./TESTING.md) for the full walkthrough.
+The provider Makefile at the repo root wraps every step of the dev loop so you
+do not have to remember `go run sigs.k8s.io/controller-tools/...`,
+`crossplane xpkg build --package-root=... --embed-runtime-image=...`,
+`kind load docker-image ...`, and so on. Run `make help` for the full list.
 
-The short version:
+### 2.1 The everyday inner loop
+
+After editing code, the one command you usually want is:
 
 ```bash
-# 1. Install CRDs into the cluster
-kubectl apply -f package/crds/
-
-# 2. Create the Ops Manager credentials secret
-kubectl create secret generic opsmanager-credentials \
-  -n crossplane-system \
-  --from-literal=credentials='{"publicKey":"<your-public-key>","privateKey":"<your-private-key>"}'
-
-# 3. Apply the ProviderConfig
-kubectl apply -f examples/providerconfig.yaml
-
-# 4. Run the provider binary (watches the cluster, reconciles CRs)
-go run ./cmd/provider/main.go
+make redeploy   # generate → build image → kind load → restart provider pod
+make logs       # follow logs from the running provider
 ```
 
-The provider runs out-of-cluster using your local kubeconfig.
-No Docker image is needed for local development.
+`make redeploy` chains `generate → image → load`, then restarts the provider
+deployment so kubelet picks up the new image. Because the deployment is created
+by `make install` with `imagePullPolicy: IfNotPresent` and tagged `:dev`, kubelet
+uses the image already loaded into kind instead of pulling from a registry.
+
+### 2.2 One-time install (after the lab is up)
+
+The first time you run the provider against a fresh lab cluster:
+
+```bash
+make image      # builds ghcr.io/faust1no/opsmanager-crossplane-provider:dev
+make load       # loads it into kind cluster `local-dev`
+make install    # applies a Provider CR + DeploymentRuntimeConfig pinned to :dev
+make status     # confirms the provider package is healthy
+```
+
+After this, the everyday loop above is enough — no need to re-run `make install`
+unless you delete the Provider CR.
+
+### 2.3 Out-of-cluster run (alternative)
+
+For the fastest iteration on controller logic (no Docker build, no restart
+delay), skip `make install` and run the binary against the cluster directly:
+
+```bash
+kubectl apply -f package/crds/
+kubectl apply -f examples/providerconfig.yaml
+
+go run ./cmd/provider/main.go --debug
+```
+
+The provider uses your local kubeconfig and reconciles CRs in the cluster.
+Useful for stepping through code in a debugger.
+
+### 2.4 Target reference
+
+| Target | Use when |
+|---|---|
+| `make generate` | You changed types under `apis/` and need updated CRDs/deepcopy/methodsets |
+| `make build` | Sanity check that `go build ./...` is clean |
+| `make image` | Build the controller container image at `:dev` |
+| `make xpkg` | Build a releasable `xpkg` (see release section below) |
+| `make load` | Push the local image into the kind cluster |
+| `make install` | Apply the Provider CR + DeploymentRuntimeConfig (`:dev`, IfNotPresent) |
+| `make uninstall` | Remove the Provider CR (CRDs are left in place) |
+| `make redeploy` | Inner loop: regenerate → image → load → bounce pod |
+| `make logs` | Tail provider pod logs |
+| `make status` | Show Provider package, pod, and installed CRDs |
+| `make lint` | Run `golangci-lint` |
+| `make test` | Run `go test ./...` |
+| `make vendor` | Refresh `vendor/` after `go.mod` changes |
+| `make clean` | Delete stale `provider-opsmanager-*.xpkg` artifacts |
+
+### 2.5 Overrides
+
+Any of these can be set on the make command line:
+
+```bash
+make redeploy CLUSTER_NAME=staging-dev
+make xpkg     VERSION=v2.0.3
+make image    REGISTRY=registry.internal/platform
+```
+
+| Variable | Default | Notes |
+|---|---|---|
+| `CLUSTER_NAME` | `local-dev` | Matches the lab Makefile default |
+| `VERSION` | `dev` | Override for releases |
+| `REGISTRY` | `ghcr.io/faust1no` | The image registry path |
+| `IMAGE_NAME` | `opsmanager-crossplane-provider` | Image repo name |
+| `PROVIDER_NAMESPACE` | `crossplane-system` | Where the provider pod runs |
 
 ---
 
-## 3 — Build and Push the Package
+## 3 — Build and Push a Release
 
-A Crossplane package (`xpkg`) is an OCI image that bundles the provider runtime container
-and the CRD manifests. There are two ways to build it.
-
-### Option A — Crossplane CLI (recommended)
-
-This is the standard approach. The CLI builds and pushes an `xpkg` directly.
+A Crossplane package (`xpkg`) is an OCI image that bundles the provider runtime
+container and the CRD manifests. The provider Makefile builds it in one step.
 
 ```bash
-VERSION=v1.1.0
-IMAGE=ghcr.io/faust1no/opsmanager-crossplane-provider
+# Build the controller image + xpkg at a release version.
+make xpkg VERSION=v2.0.3
 
-# 1. Build the provider runtime image
-docker build -t ${IMAGE}:${VERSION} .
+# Push the controller image to the registry.
+docker push ghcr.io/faust1no/opsmanager-crossplane-provider:v2.0.3
 
-# 2. Push the runtime image
-docker push ${IMAGE}:${VERSION}
-
-# 3. Update the image reference in the package manifest
-#    Edit package/crossplane.yaml and set:
-#      spec.controller.image: ghcr.io/faust1no/opsmanager-crossplane-provider:<VERSION>
-
-# 4. Build the xpkg (bundles CRDs + runtime image reference)
-crossplane xpkg build \
-  --package-root=package \
-  --output=provider-opsmanager-${VERSION}.xpkg
-
-# 5. Push the xpkg to the registry
+# Push the xpkg.
 crossplane xpkg push \
-  --package=provider-opsmanager-${VERSION}.xpkg \
-  ${IMAGE}:${VERSION}
-```
-
-After pushing, log out to remove the stored credential:
-
-```bash
-docker logout ghcr.io
-```
-
-> **After pushing**, update the provider version in the GitOps repository so the new
-> package is picked up by the cluster. Change the `spec.package` tag on the `Provider`
-> object to match the version you just pushed, then open a PR in that repo.
-
-### Option B — Docker only
-
-Use this if the Crossplane CLI is not available in the build environment.
-
-```bash
-VERSION=v1.1.0
-IMAGE=ghcr.io/faust1no/opsmanager-crossplane-provider
-
-# Build the provider runtime image
-docker build -t ${IMAGE}:${VERSION} .
-docker push ${IMAGE}:${VERSION}
+  -f provider-opsmanager-v2.0.3.xpkg \
+  ghcr.io/faust1no/opsmanager-crossplane-provider:v2.0.3
 
 docker logout ghcr.io
 ```
 
-> Note: without the Crossplane CLI you cannot produce an `xpkg`.
-> The runtime image alone can be referenced in a manually authored `Provider` CR,
-> but the CRDs must be installed separately (`kubectl apply -f package/crds/`).
+Before tagging, also bump `spec.controller.image` in `package/crossplane.yaml`
+to match the new version, otherwise the xpkg will embed an old image reference.
+
+> **After pushing**, update the provider version in the GitOps repository so the
+> new package is picked up by the cluster. Change the `spec.package` tag on the
+> `Provider` object to match the version you just pushed, then open a PR.
 
 ---
 
