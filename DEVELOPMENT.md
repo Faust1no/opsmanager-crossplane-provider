@@ -35,14 +35,22 @@ sudo mv crossplane /usr/local/bin/
 >
 > | Makefile | Location | What it does |
 > |---|---|---|
-> | **Lab Makefile** | `/home/crossplane-faust/Makefile` (outside this repo) | Bootstraps the surrounding lab — kind cluster, Crossplane install, Ops Manager, MinIO, LDAP, etc. Run once per laptop. |
+> | **Lab Makefile** | `hack/lab/Makefile` | Bootstraps the surrounding lab — kind cluster, Crossplane install, Ops Manager, MinIO, LDAP, etc. Run once per laptop. |
 > | **Provider Makefile** | `Makefile` (repo root) | Builds / packages / installs *this* provider into the lab cluster. Run on every code change. |
 >
-> Sections 1 covers the lab Makefile. Section 2 covers the provider Makefile and the dev inner loop.
+> Section 1 covers the lab Makefile. Section 2 covers the provider Makefile and the dev inner loop.
 
 ## 1 — Deploy the Lab
 
-The lab `Makefile` at `/home/crossplane-faust/Makefile` bootstraps a complete local stack:
+`hack/lab/Makefile` bootstraps a complete local stack. Run it from inside the
+`hack/lab/` directory so the generated `kind-config.yaml` lands next to it:
+
+```bash
+cd hack/lab
+make all
+```
+
+The lab provisions:
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
@@ -57,11 +65,14 @@ The lab `Makefile` at `/home/crossplane-faust/Makefile` bootstraps a complete lo
 ### Quick start
 
 ```bash
+cd hack/lab
 make all
 ```
 
 This runs preflight checks, then provisions every component in order.
 Ops Manager takes 8–12 minutes to reach `Running` phase — the target waits automatically.
+
+All commands in the rest of this section assume you are in `hack/lab/`.
 
 ### Individual targets
 
@@ -106,55 +117,19 @@ Watch the replica set reach `Running`:
 kubectl get mongodb test-rs -n mongodb -w
 ```
 
-### Makefile
+### Makefile source
 
-The full Makefile is included below for reference. It lives at the repository root.
+The full lab Makefile lives at [`hack/lab/Makefile`](./hack/lab/Makefile) — open
+it directly for target implementations and tunable variables. Common
+configuration knobs:
 
-<details>
-<summary>Expand Makefile</summary>
-
-```makefile
-# ============================================================
-#  Makefile — Local Dev Stack Bootstrap
-#  Installs: kind cluster | MongoDB Controllers for K8s v1.7.0
-#            Ops Manager | Crossplane | Headlamp | MinIO
-# ============================================================
-
-SHELL := /bin/bash
-
-CLUSTER_NAME        ?= local-dev
-KIND_CONFIG         ?= kind-config.yaml
-KUBECONFIG          ?= $(HOME)/.kube/config
-
-MCK_VERSION         := 1.7.0
-MCK_NAMESPACE       := mongodb
-MONGODB_HELM_REPO   := https://mongodb.github.io/helm-charts
-
-OPS_MANAGER_VERSION := 7.0.11
-OPS_MANAGER_APPDB   := 6.0.14-ubi8
-
-CROSSPLANE_NAMESPACE := crossplane-system
-CROSSPLANE_VERSION   := 1.15.0
-
-HEADLAMP_NAMESPACE   := headlamp
-MINIO_NAMESPACE      := minio
-MINIO_ROOT_USER      := minioadmin
-MINIO_ROOT_PASSWORD  := minioadmin123
-MINIO_BUCKET         := ops-manager-blockstore
-GLAUTH_NAMESPACE     := glauth
-
-# Override these with your own Ops Manager API key for test-mongodb target
-MCK_TEST_PUBLIC_KEY  ?= <your-public-key>
-MCK_TEST_PRIVATE_KEY ?= <your-private-key>
-MCK_TEST_ORG_ID      ?= <your-org-id>
-MCK_TEST_PROJECT     ?= test-backup
-MCK_TEST_RS_NAME     ?= test-rs
-MCK_TEST_RS_VERSION  ?= 6.0.5
-```
-
-> See the full Makefile source at the repository root for all target implementations.
-
-</details>
+| Variable | Default | Notes |
+|---|---|---|
+| `CLUSTER_NAME` | `local-dev` | kind cluster name (must match provider Makefile) |
+| `MCK_VERSION` | `1.7.0` | MongoDB Controllers for Kubernetes version |
+| `OPS_MANAGER_VERSION` | `7.0.11` | Ops Manager image tag |
+| `CROSSPLANE_VERSION` | `1.15.0` | Crossplane Helm chart version |
+| `MCK_TEST_PUBLIC_KEY`<br>`MCK_TEST_PRIVATE_KEY`<br>`MCK_TEST_ORG_ID` | placeholders | Required for `make test-mongodb`. Create an Ops Manager Programmatic API Key (ORG_OWNER) and pass them on the command line; never commit them. |
 
 ---
 

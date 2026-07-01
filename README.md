@@ -207,7 +207,38 @@ kubectl get provider provider-opsmanager -w
 # INSTALLED=True, HEALTHY=True
 ```
 
-Then follow [TESTING.md](TESTING.md) to configure a `ClusterProviderConfig` (or namespace-scoped `ProviderConfig`) and apply managed resources.
+Then follow [TESTING.md](TESTING.md) to configure a `ClusterProviderConfig` (recommended — see [Adopting existing Ops Manager resources](#adopting-existing-ops-manager-resources) for when a namespaced `ProviderConfig` may also be appropriate) and apply managed resources.
+
+## Adopting existing Ops Manager resources
+
+To adopt an existing resource, apply a CR whose adoption-key field matches the
+resource in Ops Manager. On the first reconcile `Observe` finds it and the
+provider takes over without recreating it. Any optional fields you leave empty
+are back-filled from the API on that first observe.
+
+For each kind, the **adoption key** is the `spec.forProvider` field the
+controller uses to look the resource up. The **must-set** column lists the
+fields that have no API default — the request fails without them.
+
+| Kind | Adoption key | Must set in `spec.forProvider` |
+|---|---|---|
+| `OpsManagerProject`   | `name`    | `name`, `orgId` |
+| `S3Blockstore`        | `id`      | `id`, `s3BucketEndpoint`, `s3BucketName`, `s3AuthMethod`. When `s3AuthMethod: KEYS`: `awsAccessKey`, `awsSecretKeySecretRef`. |
+| `S3OplogStore`        | `id`      | same as `S3Blockstore` |
+| `BackupDaemon`        | `machine` | `machine` |
+
+Every CR also needs `spec.providerConfigRef.kind` and `.name`. **Recommended:
+use `ClusterProviderConfig`** — it works for every kind and matches the typical
+one-Ops-Manager-per-cluster topology. `BackupDaemon` and `S3OplogStore` are
+cluster-scoped and *only* accept `ClusterProviderConfig`. The namespaced
+`ProviderConfig` kind is available for multi-Ops-Manager setups (different OMs
+per namespace); if you use it, it applies only to `OpsManagerProject` and
+`S3Blockstore`.
+
+See [ADOPTION.md](ADOPTION.md) for Helm-style chart templates with the minimum
+adoption spec per kind.
+
+---
 
 ## Development
 

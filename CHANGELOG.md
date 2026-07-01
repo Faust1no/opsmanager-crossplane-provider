@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
+
+## [2.1.0] - 2026-07-01
+### Changed
+- **Breaking:** `S3OplogStore` is now cluster-scoped (like `BackupDaemon`),
+  matching the fact that Ops Manager holds one oplog config per `id` globally.
+  Cluster-scoped MRs can only use `providerConfigRef.kind: ClusterProviderConfig`.
+  Existing `S3OplogStore` CRs require an orphan-and-recreate migration because
+  CRD `scope` is immutable.
+- `--debug` now defaults to `true` so per-reconcile lines appear in stdout
+  without extra flags. Set `--debug=false` to drop back to info-level only.
+
+### Added
+- README *Adopting existing Ops Manager resources* section with a per-kind
+  adoption-key + required-fields table, plus a new `ADOPTION.md` with
+  Helm-style chart templates.
+
+### Added
+- Lab Makefile lives in the repo at `hack/lab/Makefile` so a freshly cloned repo
+  can bootstrap the surrounding stack (kind, Crossplane, Ops Manager, MinIO,
+  GLAuth, Headlamp) with `cd hack/lab && make all`. Real API credentials are
+  not committed — placeholder values must be overridden on the command line.
+- `DEVELOPMENT.md` section 1 updated to point at `hack/lab/Makefile` and
+  documents the configurable variables.
+
+## [2.0.4] - 2026-06-09
 ### Added
 - Namespace-scoped `ProviderConfig` (and `ProviderConfigUsage`) alongside the existing
   cluster-scoped `ClusterProviderConfig`. Namespaced managed resources can now pick a
