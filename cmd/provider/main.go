@@ -2,7 +2,7 @@
 //
 // CLI flags:
 //
-//	--debug                Enable debug-level logs.
+//	--debug                Enable debug-level logs. Default true; pass --debug=false to quiet.
 //	--sync-interval        How often to re-reconcile each managed resource.
 //	--poll-interval        How often to poll Ops Manager when a resource is up-to-date.
 //	--leader-election      Enable leader election (default true).
@@ -51,7 +51,7 @@ func main() {
 	app := kingpin.New("provider-opsmanager", "Crossplane provider for MongoDB Ops Manager.").
 		DefaultEnvars()
 
-	debug := app.Flag("debug", "Run with debug logging.").Short('d').Bool()
+	debug := app.Flag("debug", "Run with debug logging. Set --debug=false to quiet to info-level only.").Short('d').Default("true").Bool()
 	syncInterval := app.Flag("sync-interval", "How often all resources will be double-checked for drift from the desired state.").
 		Default("1h").Duration()
 	pollInterval := app.Flag("poll-interval", "How often individual resources will be checked for drift from the desired state.").

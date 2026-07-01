@@ -1,1 +1,4 @@
 *.xpkg
+
+# Claude Code local session state
+.claude/
