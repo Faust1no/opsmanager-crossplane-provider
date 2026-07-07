@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+#
+# collect-mongodb-support.sh
+#
+# Collects, for every MongoDB pod across N OpenShift clusters (contexts):
+#   1. The Events section of `kubectl describe pod`
+#   2. The list of available MongoDB log files
+#   3. Log excerpts (shutdown/startup/connection activity) from the newest
+#      rotated log AND the current log
+#
+# Everything is REDACTED before it touches disk so the resulting bundle
+# contains no MongoDB resource name, namespace, node name, cluster name or
+# custom domain. The real->label mapping is printed to your terminal only and
+# is NOT written into the bundle.
+#
+# We intentionally do NOT use `set -e`: collection is best-effort so one
+# failing pod/cluster never aborts the rest.
+set -uo pipefail
+
+# ============================================================================
+# CONFIG  --  edit this block (or override CONTEXTS via the env var).
+# ============================================================================
+
+# kubectl or oc; oc works fine with contexts too.
+KUBECTL="${KUBECTL:-kubectl}"
+
+# The three cluster contexts as they appear in `kubectl config get-contexts`.
+# Override without editing the file:  CONTEXTS="ctxA ctxB ctxC" ./collect-...
+if [[ -n "${CONTEXTS:-}" ]]; then
+  read -r -a CONTEXTS <<< "${CONTEXTS}"
+else
+  CONTEXTS=(
+    "ctx-cluster-a"
+    "ctx-cluster-b"
+    "ctx-cluster-c"
+  )
+fi
+
+# One namespace per context (same order as CONTEXTS).
+NAMESPACES=(
+  "mongodb"
+  "mongodb"
+  "mongodb"
+)
+
+# How to find the MongoDB pods in each cluster (same order as CONTEXTS).
+# Use a label selector...
+POD_SELECTORS=(
+  "app=<mongodb-resource>-svc"
+  "app=<mongodb-resource>-svc"
+  "app=<mongodb-resource>-svc"
+)
+# ...or hard-code pod names here to override the selector for that cluster
+# (space-separated, leave "" to use the selector instead).
+PODS_OVERRIDE=(
+  ""
+  ""
+  ""
+)
+
+# Container that holds /var/log/mongodb-mms-automation (the database container).
+# Leave empty to let kubectl pick the first container.
+CONTAINER="mongodb-enterprise-database"
+
+# Log directory and grep pattern (from the support instructions).
+LOG_DIR="/var/log/mongodb-mms-automation"
+LOG_PATTERN='MongoDB starting|waiting for connections|shutdown|dbexit|now exiting|shutdown complete'
+
+# Extra redaction rules applied to EVERY captured file, as sed -E expressions.
+# Put anything the auto-detection can't know here: the MongoDB *display* name,
+# a custom/external domain, an internal registry, the OpenShift cluster name...
+# Keep the ordinal-preserving style so support can still tell hosts apart.
+EXTRA_REDACT=(
+  's/example\.internal/REDACTED-DOMAIN/g'
+  # 's/prod-euw1/REDACTED-CLUSTER/g'
+  # 's/my-mongodb-display-name/MDB/g'
+)
+
+# Output base dir. A timestamped bundle is created underneath it.
+OUT_BASE="${OUT_BASE:-.}"
+
+# ============================================================================
+# Internals  --  you shouldn't need to touch anything below.
+# ============================================================================
+
+TS="$(date +%Y%m%dT%H%M%S)"
+BUNDLE_DIR="${OUT_BASE}/mongodb-support-bundle-${TS}"
+mkdir -p "${BUNDLE_DIR}"
+
+warn() { printf 'WARN: %s\n' "$*" >&2; }
+info() { printf '==> %s\n' "$*"; }
+
+# Escape regex/sed metacharacters in a literal string used as a sed search.
+esc() { printf '%s' "$1" | sed -e 's/[.[\*^$&/]/\\&/g'; }
+
+# Globals populated per cluster:
+REDACT_ARGS=()   # sed -E expressions for the current cluster
+RAW_STRINGS=()   # raw sensitive strings, for the post-run leak check
+
+# Run `kubectl exec` against the current pod, appending any command after args.
+kexec() { # <ctx> <ns> <pod> <cmd...>
+  local ctx="$1" ns="$2" pod="$3"; shift 3
+  if [[ -n "${CONTAINER}" ]]; then
+    "${KUBECTL}" --context "${ctx}" -n "${ns}" exec "${pod}" -c "${CONTAINER}" -- "$@"
+  else
+    "${KUBECTL}" --context "${ctx}" -n "${ns}" exec "${pod}" -- "$@"
+  fi
+}
+
+# Apply the current cluster's redaction rules to stdin.
+redact() {
+  if ((${#REDACT_ARGS[@]})); then
+    sed -E "${REDACT_ARGS[@]}"
+  else
+    cat
+  fi
+}
+
+# Build REDACT_ARGS + RAW_STRINGS for a cluster from its pods and their nodes.
+# Placeholders are deliberately distinct & uppercase so they never collide
+# with each other or with real lowercase DNS names:
+#   MongoDB resource prefix -> MDB   (ordinal like -0/-1/-2 is preserved)
+#   namespace               -> NS
+#   node name               -> NODE
+build_redactor() { # <ctx> <ns> <pod...>
+  local ctx="$1" ns="$2"; shift 2
+  REDACT_ARGS=()
+  RAW_STRINGS=()
+
+  # User-supplied rules run first (most specific: domains, cluster names, ...).
+  local rule
+  for rule in "${EXTRA_REDACT[@]}"; do
+    REDACT_ARGS+=("-e" "${rule}")
+  done
+
+  # Node names (may be FQDNs) -> NODE. Collect uniquely across the pods.
+  local pod node seen_nodes=" "
+  for pod in "$@"; do
+    node="$("${KUBECTL}" --context "${ctx}" -n "${ns}" get pod "${pod}" \
+             -o jsonpath='{.spec.nodeName}' 2>/dev/null)"
+    if [[ -n "${node}" && "${seen_nodes}" != *" ${node} "* ]]; then
+      REDACT_ARGS+=("-e" "s/$(esc "${node}")/NODE/g")
+      RAW_STRINGS+=("${node}")
+      seen_nodes+="${node} "
+    fi
+  done
+
+  # MongoDB resource prefixes (pod name minus trailing -N) -> MDB. Dedupe.
+  local prefix seen_prefixes=" "
+  for pod in "$@"; do
+    prefix="${pod%-*}"
+    if [[ -n "${prefix}" && "${seen_prefixes}" != *" ${prefix} "* ]]; then
+      REDACT_ARGS+=("-e" "s/$(esc "${prefix}")/MDB/g")
+      RAW_STRINGS+=("${prefix}")
+      seen_prefixes+="${prefix} "
+    fi
+  done
+
+  # Namespace -> NS (broad replace; cosmetic hits on paths are acceptable).
+  REDACT_ARGS+=("-e" "s/$(esc "${ns}")/NS/g")
+  RAW_STRINGS+=("${ns}")
+}
+
+# Resolve the pods for a cluster into the global CLUSTER_PODS array.
+resolve_pods() { # <ctx> <ns> <override> <selector>
+  local ctx="$1" ns="$2" override="$3" selector="$4"
+  CLUSTER_PODS=()
+  if [[ -n "${override}" ]]; then
+    read -r -a CLUSTER_PODS <<< "${override}"
+    return
+  fi
+  mapfile -t CLUSTER_PODS < <(
+    "${KUBECTL}" --context "${ctx}" -n "${ns}" get pods -l "${selector}" \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null
+  )
+}
+
+# Newest rotated log file on a pod (largest fixed-width timestamp = latest).
+newest_rotated() { # <ctx> <ns> <pod>
+  kexec "$1" "$2" "$3" sh -c \
+    "ls -1 ${LOG_DIR}/mongodb.log.* 2>/dev/null | sort | tail -n 1" 2>/dev/null \
+    | tr -d '\r'
+}
+
+# Post-run safety net: ensure no raw sensitive string survived into the bundle.
+verify_no_leak() { # <raw...>
+  local raw leaked=0
+  for raw in "$@"; do
+    [[ -z "${raw}" ]] && continue
+    if grep -rIlF -- "${raw}" "${BUNDLE_DIR}" >/dev/null 2>&1; then
+      warn "LEAK: raw string still present in bundle -> '${raw}'"
+      leaked=1
+    fi
+  done
+  return "${leaked}"
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+info "Bundle: ${BUNDLE_DIR}"
+echo
+echo "Cluster label -> context mapping (kept OUT of the bundle):"
+
+ALL_RAW=()
+LEAK_FOUND=0
+
+for i in "${!CONTEXTS[@]}"; do
+  ctx="${CONTEXTS[$i]}"
+  ns="${NAMESPACES[$i]:-default}"
+  sel="${POD_SELECTORS[$i]:-}"
+  ovr="${PODS_OVERRIDE[$i]:-}"
+
+  label="cluster$((i + 1))"
+  cdir="${BUNDLE_DIR}/${label}"
+  mkdir -p "${cdir}"
+  printf '  %-9s -> %s (ns=%s)\n' "${label}" "${ctx}" "${ns}"
+
+  resolve_pods "${ctx}" "${ns}" "${ovr}" "${sel}"
+  if ((${#CLUSTER_PODS[@]} == 0)); then
+    warn "[${label}] no pods found (context '${ctx}', selector '${sel}'); skipping."
+    continue
+  fi
+
+  build_redactor "${ctx}" "${ns}" "${CLUSTER_PODS[@]}"
+  ALL_RAW+=("${RAW_STRINGS[@]}")
+
+  info "[${label}] pods: ${CLUSTER_PODS[*]}"
+
+  for j in "${!CLUSTER_PODS[@]}"; do
+    pod="${CLUSTER_PODS[$j]}"
+
+    # 1. Events section of `kubectl describe pod`.
+    "${KUBECTL}" --context "${ctx}" -n "${ns}" describe pod "${pod}" 2>/dev/null \
+      | awk '/^Events:/{f=1} f' \
+      | redact > "${cdir}/pod-${j}-events.txt"
+
+    # 2. Available MongoDB log files (kept locally, redacted; harmless).
+    kexec "${ctx}" "${ns}" "${pod}" ls -la "${LOG_DIR}/" 2>/dev/null \
+      | grep -i mongo \
+      | redact > "${cdir}/pod-${j}-logfiles.txt"
+
+    # 3a. Previous rotated log: shutdown + connection activity before restart.
+    rotated="$(newest_rotated "${ctx}" "${ns}" "${pod}")"
+    if [[ -n "${rotated}" ]]; then
+      kexec "${ctx}" "${ns}" "${pod}" \
+        grep -Ein -C 3 "${LOG_PATTERN}" "${rotated}" 2>/dev/null \
+        | redact > "${cdir}/pod-${j}-old.log"
+    else
+      warn "[${label}] ${pod}: no rotated log found; skipping old.log"
+      : > "${cdir}/pod-${j}-old.log"
+    fi
+
+    # 3b. Current log: startup + connection activity after restart.
+    kexec "${ctx}" "${ns}" "${pod}" \
+      grep -Ein -C 3 "${LOG_PATTERN}" "${LOG_DIR}/mongodb.log" 2>/dev/null \
+      | redact > "${cdir}/pod-${j}-current.log"
+
+    info "[${label}] collected pod-${j} (events, logfiles, old, current)"
+  done
+done
+
+echo
+info "Verifying redaction (scanning bundle for raw sensitive strings)..."
+if ((${#ALL_RAW[@]})) && ! verify_no_leak "${ALL_RAW[@]}"; then
+  LEAK_FOUND=1
+fi
+
+# Package the bundle.
+TARBALL="${BUNDLE_DIR}.tar.gz"
+tar -czf "${TARBALL}" -C "$(dirname "${BUNDLE_DIR}")" "$(basename "${BUNDLE_DIR}")"
+
+echo
+if ((LEAK_FOUND)); then
+  warn "Redaction check FOUND raw strings above. Do NOT send the bundle yet;"
+  warn "add the offending values to EXTRA_REDACT and re-run."
+else
+  info "Redaction check passed: no known raw sensitive strings in the bundle."
+fi
+info "Bundle dir : ${BUNDLE_DIR}"
+info "Tarball    : ${TARBALL}"
+echo "Review the files, then send the tarball to support."
