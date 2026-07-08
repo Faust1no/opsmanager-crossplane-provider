@@ -68,7 +68,7 @@ func (c *connector) Connect(ctx context.Context, cr *v1alpha1.BackupDaemon) (man
 		return nil, errors.Wrap(err, errTrackUsage)
 	}
 
-	opsClient, _, err := clients.Resolve(ctx, c.kube, cr.GetProviderConfigReference(), cr.GetNamespace())
+	opsClient, _, err := clients.Resolve(ctx, c.kube, cr.GetProviderConfigReference())
 	if err != nil {
 		return nil, errors.Wrap(err, errGetProviderConfig)
 	}

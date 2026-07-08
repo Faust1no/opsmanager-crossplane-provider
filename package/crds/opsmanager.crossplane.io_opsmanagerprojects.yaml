@@ -14,7 +14,7 @@ spec:
     listKind: OpsManagerProjectList
     plural: opsmanagerprojects
     singular: opsmanagerproject
-  scope: Namespaced
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.conditions[?(@.type=='Ready')].status

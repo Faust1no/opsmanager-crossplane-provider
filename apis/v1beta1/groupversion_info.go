@@ -44,25 +44,3 @@ var (
 	}
 )
 
-// ProviderConfig type metadata.
-var (
-	ProviderConfigGroupKind = schema.GroupKind{
-		Group: Group,
-		Kind:  "ProviderConfig",
-	}
-	ProviderConfigGroupVersionKind = schema.GroupVersionKind{
-		Group:   Group,
-		Version: Version,
-		Kind:    "ProviderConfig",
-	}
-	ProviderConfigUsageGroupVersionKind = schema.GroupVersionKind{
-		Group:   Group,
-		Version: Version,
-		Kind:    "ProviderConfigUsage",
-	}
-	ProviderConfigUsageListGroupVersionKind = schema.GroupVersionKind{
-		Group:   Group,
-		Version: Version,
-		Kind:    "ProviderConfigUsageList",
-	}
-)

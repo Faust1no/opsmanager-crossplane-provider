@@ -40,22 +40,3 @@ func (p *ClusterProviderConfigUsage) SetResourceReference(r xpv1.TypedReference)
 	p.ResourceReference = r
 }
 
-// GetProviderConfigReference of this ProviderConfigUsage.
-func (p *ProviderConfigUsage) GetProviderConfigReference() xpv1.ProviderConfigReference {
-	return p.ProviderConfigReference
-}
-
-// GetResourceReference of this ProviderConfigUsage.
-func (p *ProviderConfigUsage) GetResourceReference() xpv1.TypedReference {
-	return p.ResourceReference
-}
-
-// SetProviderConfigReference of this ProviderConfigUsage.
-func (p *ProviderConfigUsage) SetProviderConfigReference(r xpv1.ProviderConfigReference) {
-	p.ProviderConfigReference = r
-}
-
-// SetResourceReference of this ProviderConfigUsage.
-func (p *ProviderConfigUsage) SetResourceReference(r xpv1.TypedReference) {
-	p.ResourceReference = r
-}

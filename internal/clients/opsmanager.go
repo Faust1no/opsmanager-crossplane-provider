@@ -1,7 +1,6 @@
-// Package clients constructs Ops Manager API clients from a ProviderConfig or
-// ClusterProviderConfig. It also offers a unified usage tracker that handles
-// both ProviderConfig kinds so controllers do not have to duplicate the
-// switch-on-kind plumbing themselves.
+// Package clients constructs Ops Manager API clients from a ClusterProviderConfig
+// and offers a usage tracker that keeps ClusterProviderConfigUsage records in
+// sync so a PC in use cannot be deleted from under a managed resource.
 package clients
 
 import (
@@ -20,11 +19,9 @@ import (
 	"github.com/crossplane-contrib/provider-opsmanager/apis/v1beta1"
 )
 
-// ProviderConfig kinds accepted in a managed resource's providerConfigRef.
-const (
-	KindClusterProviderConfig = "ClusterProviderConfig"
-	KindProviderConfig        = "ProviderConfig"
-)
+// KindClusterProviderConfig is the only providerConfigRef.kind accepted by
+// managed resources in this provider.
+const KindClusterProviderConfig = "ClusterProviderConfig"
 
 // Credentials holds the public/private API key pair.
 type Credentials struct {
@@ -32,15 +29,7 @@ type Credentials struct {
 	PrivateKey string
 }
 
-// resolvedConfig captures the connection details extracted from either a
-// ClusterProviderConfig or a ProviderConfig.
-type resolvedConfig struct {
-	baseURL string
-	creds   ProviderCredentials
-}
-
-// ProviderCredentials is a structural copy of v1beta1.ProviderCredentials so
-// the resolver can work with both kinds without committing to a single type.
+// ProviderCredentials is a structural copy of v1beta1.ProviderCredentials.
 type ProviderCredentials = v1beta1.ProviderCredentials
 
 // NewClient creates an authenticated Ops Manager client using HTTP Digest Auth.
@@ -52,60 +41,33 @@ func NewClient(baseURL string, creds *Credentials) (*opsmngr.Client, error) {
 	return opsmngr.New(httpClient, opsmngr.SetBaseURL(baseURL))
 }
 
-// Resolve fetches the referenced ProviderConfig (cluster- or namespace-scoped),
-// reads the credentials secret, and returns a ready-to-use Ops Manager client.
-//
-// mrNamespace is the managed resource's namespace, used only for namespace-scoped
-// ProviderConfig lookups (it is ignored for ClusterProviderConfig). For
-// cluster-scoped managed resources mrNamespace will be the empty string, in
-// which case a ref to ProviderConfig is rejected with a clear error.
-func Resolve(ctx context.Context, kube client.Client, ref *xpv1.ProviderConfigReference, mrNamespace string) (*opsmngr.Client, string, error) {
+// Resolve fetches the referenced ClusterProviderConfig, reads its credentials
+// secret, and returns a ready-to-use Ops Manager client.
+func Resolve(ctx context.Context, kube client.Client, ref *xpv1.ProviderConfigReference) (*opsmngr.Client, string, error) {
 	if ref == nil {
 		return nil, "", errors.New("managed resource has no providerConfigRef")
 	}
+	if ref.Kind != KindClusterProviderConfig {
+		return nil, "", errors.Errorf(
+			"unsupported providerConfigRef.kind %q; must be %q",
+			ref.Kind, KindClusterProviderConfig)
+	}
 
-	rc, err := lookup(ctx, kube, ref, mrNamespace)
+	pc := &v1beta1.ClusterProviderConfig{}
+	if err := kube.Get(ctx, types.NamespacedName{Name: ref.Name}, pc); err != nil {
+		return nil, "", errors.Wrapf(err, "cannot get ClusterProviderConfig %q", ref.Name)
+	}
+
+	creds, err := readCredentials(ctx, kube, pc.Spec.Credentials)
 	if err != nil {
-		return nil, "", err
+		return nil, pc.Spec.BaseURL, err
 	}
 
-	creds, err := readCredentials(ctx, kube, rc.creds)
+	cli, err := NewClient(pc.Spec.BaseURL, creds)
 	if err != nil {
-		return nil, rc.baseURL, err
+		return nil, pc.Spec.BaseURL, errors.Wrap(err, "cannot create Ops Manager client")
 	}
-
-	cli, err := NewClient(rc.baseURL, creds)
-	if err != nil {
-		return nil, rc.baseURL, errors.Wrap(err, "cannot create Ops Manager client")
-	}
-	return cli, rc.baseURL, nil
-}
-
-func lookup(ctx context.Context, kube client.Client, ref *xpv1.ProviderConfigReference, mrNamespace string) (resolvedConfig, error) {
-	switch ref.Kind {
-	case KindClusterProviderConfig:
-		pc := &v1beta1.ClusterProviderConfig{}
-		if err := kube.Get(ctx, types.NamespacedName{Name: ref.Name}, pc); err != nil {
-			return resolvedConfig{}, errors.Wrapf(err, "cannot get ClusterProviderConfig %q", ref.Name)
-		}
-		return resolvedConfig{baseURL: pc.Spec.BaseURL, creds: pc.Spec.Credentials}, nil
-
-	case KindProviderConfig:
-		if mrNamespace == "" {
-			return resolvedConfig{}, errors.Errorf(
-				"cluster-scoped managed resources cannot reference a namespace-scoped ProviderConfig; use kind: ClusterProviderConfig instead")
-		}
-		pc := &v1beta1.ProviderConfig{}
-		if err := kube.Get(ctx, types.NamespacedName{Namespace: mrNamespace, Name: ref.Name}, pc); err != nil {
-			return resolvedConfig{}, errors.Wrapf(err, "cannot get ProviderConfig %s/%s", mrNamespace, ref.Name)
-		}
-		return resolvedConfig{baseURL: pc.Spec.BaseURL, creds: pc.Spec.Credentials}, nil
-
-	default:
-		return resolvedConfig{}, errors.Errorf(
-			"unsupported providerConfigRef.kind %q; must be %q or %q",
-			ref.Kind, KindClusterProviderConfig, KindProviderConfig)
-	}
+	return cli, pc.Spec.BaseURL, nil
 }
 
 func readCredentials(ctx context.Context, kube client.Client, cd ProviderCredentials) (*Credentials, error) {
@@ -142,36 +104,29 @@ func getSecretValue(ctx context.Context, kube client.Client, ref *xpv1.SecretKey
 	return string(val), nil
 }
 
-// UsageTracker dispatches to either the cluster-scoped or the namespace-scoped
-// ProviderConfigUsage tracker based on the managed resource's
-// providerConfigRef.kind. It implements resource.Tracker.
+// UsageTracker records ClusterProviderConfigUsage against a managed resource.
+// It implements resource.Tracker.
 type UsageTracker struct {
-	cluster    *resource.ProviderConfigUsageTracker
-	namespaced *resource.ProviderConfigUsageTracker
+	tracker *resource.ProviderConfigUsageTracker
 }
 
-// NewUsageTracker returns a UsageTracker wired for both ProviderConfig kinds.
+// NewUsageTracker returns a UsageTracker wired for ClusterProviderConfigUsage.
 func NewUsageTracker(c client.Client) *UsageTracker {
 	return &UsageTracker{
-		cluster:    resource.NewProviderConfigUsageTracker(c, &v1beta1.ClusterProviderConfigUsage{}),
-		namespaced: resource.NewProviderConfigUsageTracker(c, &v1beta1.ProviderConfigUsage{}),
+		tracker: resource.NewProviderConfigUsageTracker(c, &v1beta1.ClusterProviderConfigUsage{}),
 	}
 }
 
-// Track records usage against the appropriate ProviderConfigUsage type.
+// Track records usage against the ClusterProviderConfigUsage type.
 func (u *UsageTracker) Track(ctx context.Context, mg resource.ModernManaged) error {
 	ref := mg.GetProviderConfigReference()
 	if ref == nil {
 		return errors.New("managed resource has no providerConfigRef")
 	}
-	switch ref.Kind {
-	case KindClusterProviderConfig:
-		return u.cluster.Track(ctx, mg)
-	case KindProviderConfig:
-		return u.namespaced.Track(ctx, mg)
-	default:
+	if ref.Kind != KindClusterProviderConfig {
 		return errors.Errorf(
-			"unsupported providerConfigRef.kind %q; must be %q or %q",
-			ref.Kind, KindClusterProviderConfig, KindProviderConfig)
+			"unsupported providerConfigRef.kind %q; must be %q",
+			ref.Kind, KindClusterProviderConfig)
 	}
+	return u.tracker.Track(ctx, mg)
 }
