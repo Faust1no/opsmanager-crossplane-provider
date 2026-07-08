@@ -13,4 +13,4 @@ spec:
   crossplane:
     version: ">=v1.14.0-0"
   controller:
-    image: ghcr.io/faust1no/opsmanager-crossplane-provider:v2.1.0
+    image: ghcr.io/faust1no/opsmanager-crossplane-provider:v3.0.0

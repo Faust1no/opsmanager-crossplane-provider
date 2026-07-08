@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-07-08
+### Changed
+- **Breaking:** `OpsManagerProject`, `S3Blockstore`, `S3OplogStore` and
+  `BackupDaemon` are all cluster-scoped. Every Ops Manager resource this
+  provider manages is identified by an OM-global key (`name`, `id`, `id`,
+  `machine`), so cluster scope is the honest data model. CRD `scope` is
+  immutable, so existing namespaced CRs require an orphan-and-recreate
+  migration; the external OM resource is preserved and re-adopted via
+  `spec.forProvider.{name,id,machine}`.
+- **Breaking:** the namespace-scoped `ProviderConfig` and `ProviderConfigUsage`
+  kinds (added in v2.0.4) are removed. `ClusterProviderConfig` is the sole
+  `providerConfigRef.kind`. Existing `ProviderConfig` CRs must be recreated as
+  `ClusterProviderConfig` during upgrade.
+- `clients.Resolve` drops its `mrNamespace` parameter — no namespace-scoped
+  lookup remains — and `clients.UsageTracker` dispatches only to the
+  cluster-scoped tracker.
+
 ## [2.1.0] - 2026-07-01
 ### Changed
 - **Breaking:** `S3OplogStore` is now cluster-scoped (like `BackupDaemon`),

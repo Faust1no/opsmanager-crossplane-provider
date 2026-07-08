@@ -1,14 +1,11 @@
 // Package v1beta1 contains the ProviderConfig types for the Ops Manager
-// provider. Two variants are supported:
+// provider.
 //
-//   - ClusterProviderConfig is cluster-scoped and intended to be referenced by
-//     any managed resource in the cluster. Use it when a single Ops Manager
-//     instance is shared by every tenant.
-//   - ProviderConfig is namespace-scoped and intended to be referenced by
-//     managed resources in the same namespace. Use it when different
-//     namespaces target different Ops Manager instances.
-//
-// A managed resource selects the variant via its providerConfigRef.kind field.
+// Only ClusterProviderConfig is supported: every managed resource in this
+// provider is cluster-scoped and represents an OM-global singleton, so a
+// cluster-wide provider config is the correct data model. See the CHANGELOG
+// v3.0.0 entry for the removal of the previously-supported namespace-scoped
+// ProviderConfig.
 package v1beta1
 
 import (
@@ -17,9 +14,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProviderConfigSpec defines the desired state of a ProviderConfig (and
-// ClusterProviderConfig). The two variants share their spec shape; only the
-// scope of the resource differs.
+// ProviderConfigSpec defines the desired state of a ClusterProviderConfig.
+// The name is kept generic (not "ClusterProviderConfigSpec") to leave room for
+// a future re-introduction of a namespace-scoped variant sharing the same spec.
 type ProviderConfigSpec struct {
 	// BaseURL is the base URL of the MongoDB Ops Manager API.
 	// e.g. "https://my-ops-manager.example.com/"
@@ -46,13 +43,8 @@ type ProviderCredentials struct {
 	PrivateKeySecretRef *xpv1.SecretKeySelector `json:"privateKeySecretRef,omitempty"`
 }
 
-// ----------------------------------------------------------------------------
-// ClusterProviderConfig (cluster-scoped)
-// ----------------------------------------------------------------------------
-
-// ClusterProviderConfigSpec is an alias of ProviderConfigSpec used for the
-// cluster-scoped variant. Kept as a distinct type so that future divergence
-// (e.g. cluster-only fields) does not require schema changes for both kinds.
+// ClusterProviderConfigSpec is an alias of ProviderConfigSpec kept for
+// symmetry with the Status type.
 type ClusterProviderConfigSpec = ProviderConfigSpec
 
 // ClusterProviderConfigStatus represents the observed state of a ClusterProviderConfig.
@@ -126,84 +118,7 @@ type ClusterProviderConfigUsageList struct {
 	Items           []ClusterProviderConfigUsage `json:"items"`
 }
 
-// ----------------------------------------------------------------------------
-// ProviderConfig (namespace-scoped)
-// ----------------------------------------------------------------------------
-
-// ProviderConfigStatus represents the observed state of a ProviderConfig.
-type ProviderConfigStatus struct {
-	xpv1.ProviderConfigStatus `json:",inline"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:storageversion
-// +kubebuilder:resource:scope=Namespaced,categories=crossplane
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="URL",type="string",JSONPath=".spec.baseURL"
-
-// ProviderConfig configures a MongoDB Ops Manager provider for a single namespace.
-type ProviderConfig struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   ProviderConfigSpec   `json:"spec"`
-	Status ProviderConfigStatus `json:"status,omitempty"`
-}
-
-// GetCondition of this ProviderConfig.
-func (pc *ProviderConfig) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
-	return pc.Status.GetCondition(ct)
-}
-
-// SetConditions of this ProviderConfig.
-func (pc *ProviderConfig) SetConditions(c ...xpv1.Condition) {
-	pc.Status.SetConditions(c...)
-}
-
-// GetUsers returns the number of managed resources using this ProviderConfig.
-func (pc *ProviderConfig) GetUsers() int64 { return pc.Status.Users }
-
-// SetUsers sets the number of managed resources using this ProviderConfig.
-func (pc *ProviderConfig) SetUsers(i int64) { pc.Status.Users = i }
-
-// +kubebuilder:object:root=true
-
-// ProviderConfigList contains a list of ProviderConfig.
-type ProviderConfigList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ProviderConfig `json:"items"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:storageversion
-// +kubebuilder:resource:scope=Namespaced,categories=crossplane
-// +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:printcolumn:name="CONFIG-NAME",type="string",JSONPath=".providerConfigRef.name"
-// +kubebuilder:printcolumn:name="RESOURCE-KIND",type="string",JSONPath=".resourceRef.kind"
-// +kubebuilder:printcolumn:name="RESOURCE-NAME",type="string",JSONPath=".resourceRef.name"
-
-// ProviderConfigUsage indicates that a resource is using a ProviderConfig.
-type ProviderConfigUsage struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	xpv2.TypedProviderConfigUsage `json:",inline"`
-}
-
-// +kubebuilder:object:root=true
-
-// ProviderConfigUsageList contains a list of ProviderConfigUsage.
-type ProviderConfigUsageList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ProviderConfigUsage `json:"items"`
-}
-
 func init() {
 	SchemeBuilder.Register(&ClusterProviderConfig{}, &ClusterProviderConfigList{})
 	SchemeBuilder.Register(&ClusterProviderConfigUsage{}, &ClusterProviderConfigUsageList{})
-	SchemeBuilder.Register(&ProviderConfig{}, &ProviderConfigList{})
-	SchemeBuilder.Register(&ProviderConfigUsage{}, &ProviderConfigUsageList{})
 }

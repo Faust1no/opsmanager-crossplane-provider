@@ -14,18 +14,13 @@ A provider is a Kubernetes controller that knows how to talk to one external
 API. This repo _is_ a provider — it targets the MongoDB Ops Manager REST API.
 When installed, it runs as a pod inside the cluster and watches for CRs.
 
-**ProviderConfig** (`apis/v1beta1/providerconfig_types.go`)
+**ClusterProviderConfig** (`apis/v1beta1/providerconfig_types.go`)
 Holds the connection details shared by managed resources: the Ops Manager base
-URL and a reference to a Kubernetes Secret containing the API key pair. The
-provider supports two variants:
-
-- `ClusterProviderConfig` — cluster-scoped, referenced by any managed resource
-  via `providerConfigRef: { kind: ClusterProviderConfig, name: ... }`. Use this
-  for the common case of one Ops Manager shared across the cluster.
-- `ProviderConfig` — namespace-scoped, referenced only by managed resources in
-  the same namespace via `providerConfigRef: { kind: ProviderConfig, name: ... }`.
-  Use this when different namespaces target different Ops Manager instances.
-  Cluster-scoped managed resources (`BackupDaemon`) cannot reference this kind.
+URL and a reference to a Kubernetes Secret containing the API key pair.
+Cluster-scoped and referenced by every managed resource in this provider via
+`providerConfigRef: { kind: ClusterProviderConfig, name: ... }`. One
+`ClusterProviderConfig` maps 1:1 to one Ops Manager instance, matching Ops
+Manager's global-singleton data model.
 
 ```yaml
 apiVersion: opsmanager.crossplane.io/v1beta1
@@ -207,7 +202,7 @@ kubectl get provider provider-opsmanager -w
 # INSTALLED=True, HEALTHY=True
 ```
 
-Then follow [TESTING.md](TESTING.md) to configure a `ClusterProviderConfig` (recommended — see [Adopting existing Ops Manager resources](#adopting-existing-ops-manager-resources) for when a namespaced `ProviderConfig` may also be appropriate) and apply managed resources.
+Then follow [TESTING.md](TESTING.md) to configure a `ClusterProviderConfig` and apply managed resources.
 
 ## Adopting existing Ops Manager resources
 
@@ -227,13 +222,11 @@ fields that have no API default — the request fails without them.
 | `S3OplogStore`        | `id`      | same as `S3Blockstore` |
 | `BackupDaemon`        | `machine` | `machine` |
 
-Every CR also needs `spec.providerConfigRef.kind` and `.name`. **Recommended:
-use `ClusterProviderConfig`** — it works for every kind and matches the typical
-one-Ops-Manager-per-cluster topology. `BackupDaemon` and `S3OplogStore` are
-cluster-scoped and *only* accept `ClusterProviderConfig`. The namespaced
-`ProviderConfig` kind is available for multi-Ops-Manager setups (different OMs
-per namespace); if you use it, it applies only to `OpsManagerProject` and
-`S3Blockstore`.
+All four managed resources are cluster-scoped and reference
+`spec.providerConfigRef.kind: ClusterProviderConfig`. Ops Manager holds one
+config per external identifier globally (per project name, per store id, per
+daemon machine), so a cluster-scoped `ClusterProviderConfig`-to-OM 1:1 mapping
+matches the underlying data model exactly.
 
 See [ADOPTION.md](ADOPTION.md) for Helm-style chart templates with the minimum
 adoption spec per kind.

@@ -4,14 +4,15 @@ Minimum-spec Helm-style templates for adopting an existing Ops Manager resource.
 See the **Adopting existing Ops Manager resources** section of the [README](README.md)
 for the required-field rules these templates follow.
 
-All templates assume a `ClusterProviderConfig` named `default` already exists in
-the cluster. This is the recommended setup — it works for every kind and matches
-the typical one-Ops-Manager-per-cluster topology. `BackupDaemon` and
-`S3OplogStore` are cluster-scoped and can *only* use `ClusterProviderConfig`.
+All four managed resources are cluster-scoped in v3.0.0 and reference a
+`ClusterProviderConfig`. Ops Manager holds one config per external identifier
+globally (per project name, per store id, per daemon machine) so
+`ClusterProviderConfig` maps 1:1 to one Ops Manager instance.
 
-For a multi-Ops-Manager setup (different OMs per namespace), the two namespaced
-kinds (`OpsManagerProject`, `S3Blockstore`) can instead reference a
-`kind: ProviderConfig` in the same namespace.
+The templates assume a `ClusterProviderConfig` named `default` already exists.
+Secrets remain namespaced Kubernetes objects — the templates use
+`{{ .Release.Namespace }}` for the secret refs, which is where the chart's
+Kubernetes Secret is expected to live.
 
 ## `OpsManagerProject`
 
@@ -23,7 +24,6 @@ apiVersion: opsmanager.crossplane.io/v1alpha1
 kind: OpsManagerProject
 metadata:
   name: {{ .Values.project.name }}
-  namespace: {{ .Release.Namespace }}
 spec:
   providerConfigRef:
     kind: ClusterProviderConfig
@@ -48,7 +48,6 @@ apiVersion: opsmanager.crossplane.io/v1alpha1
 kind: S3Blockstore
 metadata:
   name: {{ .Values.blockstore.id }}
-  namespace: {{ .Release.Namespace }}
 spec:
   providerConfigRef:
     kind: ClusterProviderConfig
@@ -72,10 +71,8 @@ spec:
 
 ## `S3OplogStore`
 
-Cluster-scoped (one oplog config per `id` globally in Ops Manager). Adoption
-key and required `forProvider` fields are identical to `S3Blockstore`; only the
-OM endpoint differs (oplog vs. snapshot). Only `ClusterProviderConfig` is
-allowed in `providerConfigRef`.
+Adoption key and required `forProvider` fields are identical to `S3Blockstore`;
+only the OM endpoint differs (oplog vs. snapshot).
 
 ```yaml
 apiVersion: opsmanager.crossplane.io/v1alpha1
