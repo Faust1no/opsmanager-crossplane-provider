@@ -97,6 +97,61 @@ spec:
                       project.
                     minLength: 1
                     type: string
+                  snapshotSchedule:
+                    description: |-
+                      SnapshotSchedule configures the backup snapshot schedule and retention
+                      policy on the project's backup config. All fields are optional; any field
+                      left unset is not sent in the PATCH payload, so Ops Manager preserves its
+                      current value (either the OM default or whatever was last configured).
+
+                      Requires at least one cluster in the project to have backup enabled; if
+                      no backup config exists the resource becomes Synced=False until one does.
+                    properties:
+                      clusterCheckpointIntervalMin:
+                        description: |-
+                          ClusterCheckpointIntervalMin is how often (in minutes) backup takes
+                          cluster checkpoints. Only applicable for sharded clusters.
+                        type: integer
+                      dailySnapshotRetentionDays:
+                        description: |-
+                          DailySnapshotRetentionDays is the number of days to keep daily snapshots.
+                          Set to 0 to disable daily snapshot retention.
+                        type: integer
+                      monthlySnapshotRetentionMonths:
+                        description: |-
+                          MonthlySnapshotRetentionMonths is the number of months to keep monthly snapshots.
+                          Set to 0 to disable monthly snapshot retention.
+                        type: integer
+                      pointInTimeWindowHours:
+                        description: PointInTimeWindowHours is the number of hours
+                          in the past at which a point-in-time restore is possible.
+                        type: integer
+                      referenceHourOfDay:
+                        description: ReferenceHourOfDay is the hour of the day at
+                          which the daily snapshot is taken (0-23).
+                        maximum: 23
+                        minimum: 0
+                        type: integer
+                      referenceMinuteOfHour:
+                        description: ReferenceMinuteOfHour is the minute of the hour
+                          at which the daily snapshot is taken (0-59).
+                        maximum: 59
+                        minimum: 0
+                        type: integer
+                      snapshotIntervalHours:
+                        description: SnapshotIntervalHours is how often (in hours)
+                          snapshots are taken.
+                        type: integer
+                      snapshotRetentionDays:
+                        description: SnapshotRetentionDays is the number of days to
+                          keep recent snapshots.
+                        type: integer
+                      weeklySnapshotRetentionWeeks:
+                        description: |-
+                          WeeklySnapshotRetentionWeeks is the number of weeks to keep weekly snapshots.
+                          Set to 0 to disable weekly snapshot retention.
+                        type: integer
+                    type: object
                 required:
                 - name
                 - orgId

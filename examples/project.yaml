@@ -2,7 +2,6 @@ apiVersion: opsmanager.crossplane.io/v1alpha1
 kind: OpsManagerProject
 metadata:
   name: test-project
-  namespace: crossplane-system
 spec:
   providerConfigRef:
     kind: ClusterProviderConfig
@@ -22,3 +21,13 @@ spec:
       - roleName: GROUP_READ_ONLY
         ldapGroups:
           - "ou=opsmanager-readonly,ou=users,dc=opsmanager,dc=local"
+    # Optional: nested snapshot schedule / retention policy.
+    # All fields are optional; nil = don't manage (OM keeps current value).
+    # Requires at least one cluster in the project to have backup enabled.
+    # snapshotSchedule:
+    #   snapshotRetentionDays:          2
+    #   dailySnapshotRetentionDays:     7
+    #   weeklySnapshotRetentionWeeks:   4
+    #   monthlySnapshotRetentionMonths: 12
+    #   pointInTimeWindowHours:         24
+    #   snapshotIntervalHours:          6

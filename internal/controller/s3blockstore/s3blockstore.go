@@ -9,6 +9,7 @@ import (
 	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
@@ -36,21 +37,32 @@ const (
 	// annotationLabelsAdopted is set after the first Observe so that labels are
 	// adopted from the API exactly once. After that, the spec YAML is authoritative.
 	annotationLabelsAdopted = "opsmanager.crossplane.io/labels-adopted"
+
+	// Event reasons recorded on the S3Blockstore CR. Emitted only on
+	// one-shot transitions (adopt, create, delete). Update is not evented
+	// because it fires on every drift reconcile and would spam.
+	reasonAdoptedBlockstore event.Reason = "AdoptedBlockstore"
+	reasonCreatedBlockstore event.Reason = "CreatedBlockstore"
+	reasonDeletedBlockstore event.Reason = "DeletedBlockstore"
 )
 
 // Setup registers the S3Blockstore controller with the manager.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
 	name := managed.ControllerName(v1alpha1.S3BlockstoreGroupKind.Kind)
+	log := o.Logger.WithValues("controller", name)
+	rec := event.NewAPIRecorder(mgr.GetEventRecorderFor(name))
 
 	r := managed.NewReconciler(mgr,
 		resource.ManagedKind(v1alpha1.S3BlockstoreGroupVersionKind),
 		managed.WithTypedExternalConnector[*v1alpha1.S3Blockstore](&connector{
-			kube:  mgr.GetClient(),
-			usage: clients.NewUsageTracker(mgr.GetClient()),
+			kube:     mgr.GetClient(),
+			usage:    clients.NewUsageTracker(mgr.GetClient()),
+			log:      log,
+			recorder: rec,
 		}),
-		managed.WithLogger(o.Logger.WithValues("controller", name)),
+		managed.WithLogger(log),
 		managed.WithPollInterval(o.PollInterval),
-		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
+		managed.WithRecorder(rec),
 		managed.WithTimeout(5*time.Minute),
 	)
 
@@ -63,8 +75,10 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 }
 
 type connector struct {
-	kube  client.Client
-	usage *clients.UsageTracker
+	kube     client.Client
+	usage    *clients.UsageTracker
+	log      logging.Logger
+	recorder event.Recorder
 }
 
 func (c *connector) Connect(ctx context.Context, cr *v1alpha1.S3Blockstore) (managed.TypedExternalClient[*v1alpha1.S3Blockstore], error) {
@@ -76,12 +90,19 @@ func (c *connector) Connect(ctx context.Context, cr *v1alpha1.S3Blockstore) (man
 	if err != nil {
 		return nil, errors.Wrap(err, errGetProviderConfig)
 	}
-	return &external{service: opsClient.S3BlockstoreConfig, kube: c.kube}, nil
+	return &external{
+		service:  opsClient.S3BlockstoreConfig,
+		kube:     c.kube,
+		log:      c.log.WithValues("blockstore", cr.Spec.ForProvider.ID),
+		recorder: c.recorder,
+	}, nil
 }
 
 type external struct {
-	service opsmngr.S3BlockstoreConfigService
-	kube    client.Client
+	service  opsmngr.S3BlockstoreConfigService
+	kube     client.Client
+	log      logging.Logger
+	recorder event.Recorder
 }
 
 func (e *external) Observe(ctx context.Context, cr *v1alpha1.S3Blockstore) (managed.ExternalObservation, error) {
@@ -89,6 +110,7 @@ func (e *external) Observe(ctx context.Context, cr *v1alpha1.S3Blockstore) (mana
 
 	observed, _, err := e.service.Get(ctx, id)
 	if isNotFound(err) {
+		e.log.Debug("Observe: blockstore not found in Ops Manager")
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 	if err != nil {
@@ -118,9 +140,13 @@ func (e *external) Observe(ctx context.Context, cr *v1alpha1.S3Blockstore) (mana
 		labelsAdopted = true
 	}
 
+	upToDate := isUpToDate(cr.Spec.ForProvider, observed, labelsAdopted)
+	e.log.Debug("Observe: blockstore found", "upToDate", upToDate,
+		"lateInitialized", lateInitialized, "assignmentEnabled", observed.AssignmentEnabled)
+
 	return managed.ExternalObservation{
 		ResourceExists:          true,
-		ResourceUpToDate:        isUpToDate(cr.Spec.ForProvider, observed, labelsAdopted),
+		ResourceUpToDate:        upToDate,
 		ResourceLateInitialized: lateInitialized,
 	}, nil
 }
@@ -132,6 +158,9 @@ func (e *external) Create(ctx context.Context, cr *v1alpha1.S3Blockstore) (manag
 		// Blockstore exists — adopt it and populate all optional spec fields from API.
 		meta.SetExternalName(cr, cr.Spec.ForProvider.ID)
 		lateInitBlockstore(&cr.Spec.ForProvider, existing)
+		e.log.Debug("Create: adopted existing blockstore")
+		e.recorder.Event(cr, event.Normal(reasonAdoptedBlockstore,
+			"adopted existing S3 blockstore "+cr.Spec.ForProvider.ID))
 		return managed.ExternalCreation{}, nil
 	}
 	if !isNotFound(err) {
@@ -145,11 +174,14 @@ func (e *external) Create(ctx context.Context, cr *v1alpha1.S3Blockstore) (manag
 	}
 
 	bs := toSDKBlockstore(cr.Spec.ForProvider, awsSecretKey)
+	e.log.Debug("Create: creating blockstore in Ops Manager", "bucket", cr.Spec.ForProvider.S3BucketName)
 	if _, _, err := e.service.Create(ctx, bs); err != nil {
 		return managed.ExternalCreation{}, errors.Wrap(err, errCreateBlockstore)
 	}
 
 	meta.SetExternalName(cr, cr.Spec.ForProvider.ID)
+	e.recorder.Event(cr, event.Normal(reasonCreatedBlockstore,
+		"created S3 blockstore "+cr.Spec.ForProvider.ID))
 	return managed.ExternalCreation{}, nil
 }
 
@@ -160,6 +192,8 @@ func (e *external) Update(ctx context.Context, cr *v1alpha1.S3Blockstore) (manag
 	}
 
 	bs := toSDKBlockstore(cr.Spec.ForProvider, awsSecretKey)
+	e.log.Debug("Update: patching blockstore", "labels", len(cr.Spec.ForProvider.Labels),
+		"assignmentEnabled", cr.Spec.ForProvider.AssignmentEnabled)
 	// Ops Manager re-runs S3 bucket validation on every blockstore update.
 	// The first probe right after a config change occasionally hits a transient
 	// 403 from S3, which OM surfaces as 409 BACKUP-S3-VALIDATION_FAILED.
@@ -187,6 +221,7 @@ func (e *external) Delete(ctx context.Context, cr *v1alpha1.S3Blockstore) (manag
 
 	// Ops Manager rejects deletion with 409 if assignmentEnabled is true.
 	if current.AssignmentEnabled != nil && *current.AssignmentEnabled {
+		e.log.Debug("Delete: disabling assignment before delete")
 		f := false
 		current.AssignmentEnabled = &f
 		if err := clients.RetryOnS3Validation(ctx, 3, 5*time.Second, func() error {
@@ -197,9 +232,14 @@ func (e *external) Delete(ctx context.Context, cr *v1alpha1.S3Blockstore) (manag
 		}
 	}
 
+	e.log.Debug("Delete: deleting blockstore")
 	_, err = e.service.Delete(ctx, id)
 	if isNotFound(err) {
 		return managed.ExternalDelete{}, nil
+	}
+	if err == nil {
+		e.recorder.Event(cr, event.Normal(reasonDeletedBlockstore,
+			"deleted S3 blockstore "+id))
 	}
 	return managed.ExternalDelete{}, errors.Wrap(err, errDeleteBlockstore)
 }
