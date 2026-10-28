@@ -35,6 +35,18 @@ spec:
     # ldapGroupMappings:
     #   - roleName: GROUP_OWNER
     #     ldapGroups: ["cn=om-owners,ou=groups,dc=example,dc=com"]
+    # Optional — nested backup snapshot schedule / retention policy.
+    # Every field is optional; nil fields are not sent in the PATCH and the
+    # Ops Manager current/default value is preserved. Applies to the single
+    # backup config in the project; the CR goes Synced=False with reason
+    # NoBackupConfig until a cluster has backup enabled.
+    # snapshotSchedule:
+    #   snapshotRetentionDays:          2
+    #   dailySnapshotRetentionDays:     7
+    #   weeklySnapshotRetentionWeeks:   4
+    #   monthlySnapshotRetentionMonths: 12
+    #   pointInTimeWindowHours:         24
+    #   snapshotIntervalHours:          6
 ```
 
 ## `S3Blockstore`

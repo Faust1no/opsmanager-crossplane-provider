@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-28
+### Added
+- `OpsManagerProject.spec.forProvider.snapshotSchedule` — nested object with
+  nine optional fields (`snapshotRetentionDays`, `dailySnapshotRetentionDays`,
+  `weeklySnapshotRetentionWeeks`, `monthlySnapshotRetentionMonths`,
+  `pointInTimeWindowHours`, `snapshotIntervalHours`, `clusterCheckpointIntervalMin`,
+  `referenceHourOfDay`, `referenceMinuteOfHour`). Each field unset means
+  "don't manage" — not sent in the PATCH, so Ops Manager preserves the current
+  (or default) value. Routes through the existing SDK
+  `SnapshotScheduleService` and PATCHes the single backup config in the project.
+  If no backup is enabled on any cluster in the project yet, the CR goes
+  `Synced=False` with reason `NoBackupConfig` and a matching event, so the
+  state is visible in `kubectl get`/`kubectl describe`.
+- Per-operation Debug logging in all four managed-resource controllers plus
+  Kubernetes events on one-shot transitions (adopt, create, delete) and
+  on project backup-config state changes (stop/terminate). `kubectl describe`
+  on a CR now surfaces the decision history; `--debug` (already default-on
+  since v2.1.0) shows the per-branch choices in stdout. Routine `Update`
+  reconciles are logged but not evented to avoid event-stream spam.
+
 ## [3.0.0] - 2026-07-08
 ### Changed
 - **Breaking:** `OpsManagerProject`, `S3Blockstore`, `S3OplogStore` and

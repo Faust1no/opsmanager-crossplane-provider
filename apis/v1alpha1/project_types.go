@@ -40,6 +40,66 @@ type OpsManagerProjectParameters struct {
 	// Only applicable when Ops Manager is backed by LDAP.
 	// +optional
 	LDAPGroupMappings []LDAPGroupMapping `json:"ldapGroupMappings,omitempty"`
+
+	// SnapshotSchedule configures the backup snapshot schedule and retention
+	// policy on the project's backup config. All fields are optional; any field
+	// left unset is not sent in the PATCH payload, so Ops Manager preserves its
+	// current value (either the OM default or whatever was last configured).
+	//
+	// Requires at least one cluster in the project to have backup enabled; if
+	// no backup config exists the resource becomes Synced=False until one does.
+	// +optional
+	SnapshotSchedule *SnapshotSchedule `json:"snapshotSchedule,omitempty"`
+}
+
+// SnapshotSchedule configures the per-cluster backup snapshot schedule and
+// retention policy. All fields are optional: a nil field is not sent to the
+// Ops Manager API, so OM keeps its existing (or default) value. This matches
+// the SDK's SnapshotSchedule shape (every field is also optional on the API).
+type SnapshotSchedule struct {
+	// SnapshotRetentionDays is the number of days to keep recent snapshots.
+	// +optional
+	SnapshotRetentionDays *int `json:"snapshotRetentionDays,omitempty"`
+
+	// DailySnapshotRetentionDays is the number of days to keep daily snapshots.
+	// Set to 0 to disable daily snapshot retention.
+	// +optional
+	DailySnapshotRetentionDays *int `json:"dailySnapshotRetentionDays,omitempty"`
+
+	// WeeklySnapshotRetentionWeeks is the number of weeks to keep weekly snapshots.
+	// Set to 0 to disable weekly snapshot retention.
+	// +optional
+	WeeklySnapshotRetentionWeeks *int `json:"weeklySnapshotRetentionWeeks,omitempty"`
+
+	// MonthlySnapshotRetentionMonths is the number of months to keep monthly snapshots.
+	// Set to 0 to disable monthly snapshot retention.
+	// +optional
+	MonthlySnapshotRetentionMonths *int `json:"monthlySnapshotRetentionMonths,omitempty"`
+
+	// PointInTimeWindowHours is the number of hours in the past at which a point-in-time restore is possible.
+	// +optional
+	PointInTimeWindowHours *int `json:"pointInTimeWindowHours,omitempty"`
+
+	// SnapshotIntervalHours is how often (in hours) snapshots are taken.
+	// +optional
+	SnapshotIntervalHours *int `json:"snapshotIntervalHours,omitempty"`
+
+	// ClusterCheckpointIntervalMin is how often (in minutes) backup takes
+	// cluster checkpoints. Only applicable for sharded clusters.
+	// +optional
+	ClusterCheckpointIntervalMin *int `json:"clusterCheckpointIntervalMin,omitempty"`
+
+	// ReferenceHourOfDay is the hour of the day at which the daily snapshot is taken (0-23).
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=23
+	ReferenceHourOfDay *int `json:"referenceHourOfDay,omitempty"`
+
+	// ReferenceMinuteOfHour is the minute of the hour at which the daily snapshot is taken (0-59).
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=59
+	ReferenceMinuteOfHour *int `json:"referenceMinuteOfHour,omitempty"`
 }
 
 // OpsManagerProjectObservation holds the observed state of the OpsManagerProject.
