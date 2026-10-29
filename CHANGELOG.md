@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-10-29
+### Fixed
+- `snapshotSchedule` PATCH previously failed against Ops Manager with
+  `400 INVALID_JSON_ATTRIBUTE: Received JSON for the clusterId attribute does
+  not match expected format`. The SDK's `SnapshotSchedule` struct tags
+  `clusterId`/`groupId` without `omitempty`, so the PATCH body shipped empty
+  strings. Fixed by populating both fields at the call site from values the
+  controller already has in scope (the resolved clusterId and the project's
+  `status.atProvider.id`). The reconciler now successfully PATCHes the
+  schedule, OM reflects the change within one poll, and fields left nil in
+  spec are still omitted (nil = don't manage).
+
 ## [3.1.0] - 2026-10-28
 ### Added
 - `OpsManagerProject.spec.forProvider.snapshotSchedule` — nested object with

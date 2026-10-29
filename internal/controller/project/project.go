@@ -225,6 +225,11 @@ func (e *external) Update(ctx context.Context, cr *v1alpha1.OpsManagerProject) (
 			return managed.ExternalUpdate{}, err
 		}
 		schedulePatch := toSDKSchedule(cr.Spec.ForProvider.SnapshotSchedule)
+		// The SDK's SnapshotSchedule struct tags clusterId/groupId without
+		// omitempty — PATCH payload would ship empty strings, which OM
+		// rejects with INVALID_JSON_ATTRIBUTE. Populate from the call site.
+		schedulePatch.ClusterID = clusterID
+		schedulePatch.GroupID = cr.Status.AtProvider.ID
 		e.log.Debug("Update: patching snapshot schedule",
 			"id", cr.Status.AtProvider.ID, "clusterId", clusterID)
 		if _, _, err := e.snapshotSchedule.Update(ctx, cr.Status.AtProvider.ID, clusterID, schedulePatch); err != nil {
